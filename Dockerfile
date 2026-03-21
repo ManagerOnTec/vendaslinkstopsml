@@ -45,8 +45,7 @@ RUN apt-get update && apt-get install -y \
 # Copiar e instalar dependências Python
 COPY requirements.txt .
 
-RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Instalar Chromium para Playwright
 RUN playwright install --with-deps chromium
