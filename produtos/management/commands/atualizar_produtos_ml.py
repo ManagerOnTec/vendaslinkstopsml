@@ -1,0 +1,217 @@
+"""
+Management command para atualizar automaticamente os produtos do Mercado Livre.
+
+Uso:
+    # Executar verificando agendamentos ativos para o horário atual
+    python manage.py atualizar_produtos_ml
+
+    # Forçar execução independente de agendamento
+    python manage.py atualizar_produtos_ml --forcar
+
+    # Atualizar apenas produtos específicos (por ID)
+    python manage.py atualizar_produtos_ml --ids 1 2 3
+
+Este command é chamado pelo Cloud Scheduler (GCP) ou cron a cada hora.
+Ele verifica se há agendamentos ativos para o horário atual e, se houver,
+executa a atualização de todos os produtos automáticos.
+"""
+import time
+import logging
+from datetime import datetime, timedelta
+
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+
+from produtos.models import (
+    ProdutoAutomatico, AgendamentoAtualizacao, LogAtualizacao, DiaSemana
+)
+from produtos.scraper import processar_produto_automatico
+
+logger = logging.getLogger(__name__)
+
+
+class Command(BaseCommand):
+    help = 'Atualiza dados dos produtos automáticos do Mercado Livre'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--forcar',
+            action='store_true',
+            help='Forçar execução independente de agendamento ativo',
+        )
+        parser.add_argument(
+            '--ids',
+            nargs='+',
+            type=int,
+            help='IDs específicos de produtos para atualizar',
+        )
+
+    def handle(self, *args, **options):
+        forcar = options.get('forcar', False)
+        ids = options.get('ids', None)
+
+        if forcar or ids:
+            self.stdout.write(
+                self.style.WARNING('Execução forçada (ignorando agendamentos)')
+            )
+            self._executar_atualizacao(agendamento=None, ids=ids)
+            return
+
+        # Verificar agendamentos ativos para o horário atual
+        agora = timezone.localtime()
+        hora_atual = agora.time()
+        dia_semana_atual = agora.weekday()  # 0=Segunda, 6=Domingo
+
+        # Mapear dia da semana para choices
+        dia_map = {
+            0: DiaSemana.SEG,
+            1: DiaSemana.TER,
+            2: DiaSemana.QUA,
+            3: DiaSemana.QUI,
+            4: DiaSemana.SEX,
+            5: DiaSemana.SAB,
+            6: DiaSemana.DOM,
+        }
+        dia_atual_choice = dia_map.get(dia_semana_atual)
+        eh_dia_util = dia_semana_atual < 5
+
+        agendamentos = AgendamentoAtualizacao.objects.filter(ativo=True)
+
+        if not agendamentos.exists():
+            self.stdout.write(
+                self.style.WARNING('Nenhum agendamento ativo encontrado.')
+            )
+            return
+
+        executou = False
+        for ag in agendamentos:
+            # Verificar se o horário corresponde (margem de 30 minutos)
+            ag_hora = ag.horario
+            hora_min = (
+                datetime.combine(agora.date(), ag_hora) - timedelta(minutes=30)
+            ).time()
+            hora_max = (
+                datetime.combine(agora.date(), ag_hora) + timedelta(minutes=30)
+            ).time()
+
+            dentro_horario = hora_min <= hora_atual <= hora_max
+
+            # Verificar dia da semana
+            dia_ok = False
+            if ag.dias_semana == DiaSemana.TODOS:
+                dia_ok = True
+            elif ag.dias_semana == DiaSemana.SEG_SEX:
+                dia_ok = eh_dia_util
+            elif ag.dias_semana == dia_atual_choice:
+                dia_ok = True
+
+            if dentro_horario and dia_ok:
+                # Verificar se já executou recentemente (última 1 hora)
+                ultimo_log = LogAtualizacao.objects.filter(
+                    agendamento=ag,
+                    executado_em__gte=agora - timedelta(hours=1)
+                ).first()
+
+                if ultimo_log:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f'Agendamento "{ag.nome}" já executou '
+                            f'recentemente ({ultimo_log.executado_em}). '
+                            f'Pulando.'
+                        )
+                    )
+                    continue
+
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f'Executando agendamento: {ag.nome} '
+                        f'({ag.horario.strftime("%H:%M")})'
+                    )
+                )
+                self._executar_atualizacao(
+                    agendamento=ag,
+                    apenas_ativos=ag.atualizar_apenas_ativos
+                )
+                executou = True
+
+        if not executou:
+            self.stdout.write(
+                self.style.WARNING(
+                    f'Nenhum agendamento para executar agora '
+                    f'({hora_atual.strftime("%H:%M")}).'
+                )
+            )
+
+    def _executar_atualizacao(
+        self, agendamento=None, ids=None, apenas_ativos=True
+    ):
+        """Executa a atualização dos produtos."""
+        inicio = time.time()
+
+        # Selecionar produtos
+        queryset = ProdutoAutomatico.objects.all()
+        if ids:
+            queryset = queryset.filter(id__in=ids)
+        elif apenas_ativos:
+            queryset = queryset.filter(ativo=True)
+
+        total = queryset.count()
+        if total == 0:
+            self.stdout.write(
+                self.style.WARNING('Nenhum produto para atualizar.')
+            )
+            return
+
+        self.stdout.write(f'Atualizando {total} produto(s)...')
+
+        sucesso = 0
+        erros = 0
+        detalhes_list = []
+
+        for produto in queryset:
+            try:
+                self.stdout.write(
+                    f'  [{sucesso + erros + 1}/{total}] '
+                    f'{produto.titulo[:50] or produto.link_afiliado[:50]}...'
+                )
+                result = processar_produto_automatico(produto)
+                if result:
+                    sucesso += 1
+                    detalhes_list.append(
+                        f'OK: {produto.titulo[:60]} '
+                        f'-> {produto.preco}'
+                    )
+                else:
+                    erros += 1
+                    detalhes_list.append(
+                        f'ERRO: {produto.titulo[:60]} '
+                        f'-> {produto.erro_extracao[:80]}'
+                    )
+            except Exception as e:
+                erros += 1
+                detalhes_list.append(
+                    f'EXCEÇÃO: {produto.id} -> {str(e)[:80]}'
+                )
+                logger.error(
+                    f'Erro ao atualizar produto {produto.id}: {e}'
+                )
+
+        duracao = time.time() - inicio
+
+        # Criar log
+        LogAtualizacao.objects.create(
+            agendamento=agendamento,
+            total_produtos=total,
+            sucesso=sucesso,
+            erros=erros,
+            detalhes='\n'.join(detalhes_list),
+            duracao_segundos=round(duracao, 2)
+        )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'\nConcluído em {duracao:.1f}s: '
+                f'{sucesso} sucesso(s), {erros} erro(s) '
+                f'de {total} produto(s).'
+            )
+        )

@@ -1,0 +1,379 @@
+/* ============================================
+   Vendas Links Tops ML - Estilos Customizados
+   ============================================ */
+
+/* === Variáveis CSS === */
+:root {
+    --primary: #3483fa;
+    --primary-dark: #2968c8;
+    --secondary: #fff159;
+    --success: #00a650;
+    --danger: #f23d4f;
+    --warning: #fff159;
+    --dark: #1a1a2e;
+    --light-bg: #f5f5f5;
+    --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --card-shadow-hover: 0 8px 25px rgba(52, 131, 250, 0.15);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --border-radius: 12px;
+}
+
+/* === Reset e Base === */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--light-bg);
+    color: #333;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-content {
+    flex: 1;
+}
+
+/* === Navbar === */
+.navbar {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
+    padding: 0.6rem 0;
+}
+
+.navbar-brand {
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+}
+
+.logo-placeholder {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* ESPAÇO PARA LOGO: quando tiver a logo, substitua este bloco por:
+       background: url('/static/images/logo.png') center/contain no-repeat;
+       e remova o <i> do template */
+}
+
+.search-form {
+    max-width: 480px;
+    width: 100%;
+}
+
+.search-form .form-control {
+    border-radius: 20px 0 0 20px;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+.search-form .btn {
+    border-radius: 0 20px 20px 0;
+    padding: 0.5rem 1.2rem;
+}
+
+/* === Categorias Bar === */
+.categorias-bar {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.categorias-bar .btn {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.9rem;
+    transition: var(--transition);
+}
+
+.categorias-bar .btn:hover {
+    transform: translateY(-1px);
+}
+
+/* === Page Header === */
+.page-header {
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+/* === Product Cards === */
+.product-card-link {
+    display: block;
+    height: 100%;
+}
+
+.product-card {
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    transition: var(--transition);
+    cursor: pointer;
+    position: relative;
+    background: #fff;
+}
+
+.product-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--card-shadow-hover);
+}
+
+.product-card:hover .btn-comprar {
+    background-color: var(--primary) !important;
+    color: #fff !important;
+    border-color: var(--primary) !important;
+}
+
+.card-img-wrapper {
+    position: relative;
+    width: 100%;
+    padding-top: 100%; /* Aspect ratio 1:1 */
+    overflow: hidden;
+    background: #fff;
+}
+
+.card-img-wrapper .card-img-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 12px;
+    transition: transform 0.4s ease;
+}
+
+.product-card:hover .card-img-top {
+    transform: scale(1.05);
+}
+
+.badge-destaque {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+}
+
+.badge-destaque .badge {
+    font-size: 0.7rem;
+    padding: 0.35em 0.6em;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.badge-desconto {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+}
+
+.badge-desconto .badge {
+    font-size: 0.7rem;
+    padding: 0.35em 0.6em;
+    border-radius: 6px;
+}
+
+.product-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #333;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.5rem;
+    min-height: 2.2em;
+}
+
+.small-badge {
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 0.2em 0.5em;
+}
+
+.preco-original {
+    font-size: 0.75rem;
+}
+
+.preco-atual {
+    font-size: 1.05rem;
+    color: var(--success) !important;
+}
+
+.btn-comprar {
+    border-radius: 8px;
+    font-size: 0.78rem;
+    padding: 0.5rem 0.5rem;
+    transition: var(--transition);
+    background-color: var(--secondary) !important;
+    border-color: var(--secondary) !important;
+    color: #333 !important;
+}
+
+/* === Ad Blocks === */
+.ad-block {
+    background: #f8f9fa;
+    border: 1px dashed #dee2e6;
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    min-height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ad-block:empty::after {
+    content: '';
+}
+
+/* === Paginação === */
+.pagination .page-link {
+    color: var(--primary);
+    border-radius: 8px;
+    margin: 0 2px;
+    border: none;
+    font-weight: 500;
+    font-size: 0.9rem;
+    padding: 0.5rem 0.85rem;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+.pagination .page-link:hover {
+    background-color: #e8f0fe;
+    color: var(--primary-dark);
+}
+
+/* === Footer === */
+.footer {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%) !important;
+}
+
+.footer .logo-placeholder {
+    width: 28px;
+    height: 28px;
+}
+
+/* === Scroll to Top Button === */
+.scroll-top-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 12px rgba(52, 131, 250, 0.35);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    z-index: 1000;
+    font-size: 1.2rem;
+}
+
+.scroll-top-btn:hover {
+    background: var(--primary-dark);
+    transform: translateY(-2px);
+}
+
+.scroll-top-btn.visible {
+    display: flex;
+}
+
+/* === Responsividade === */
+
+/* Mobile Small (< 576px) */
+@media (max-width: 575.98px) {
+    .navbar-brand span {
+        font-size: 0.95rem;
+    }
+
+    .search-form {
+        max-width: 100%;
+    }
+
+    .product-title {
+        font-size: 0.78rem;
+        min-height: 2em;
+    }
+
+    .preco-atual {
+        font-size: 0.95rem;
+    }
+
+    .btn-comprar {
+        font-size: 0.7rem;
+        padding: 0.4rem 0.3rem;
+    }
+
+    .card-body {
+        padding: 0.6rem !important;
+    }
+
+    .page-header h1 {
+        font-size: 1.1rem;
+    }
+}
+
+/* Tablet (576px - 991px) */
+@media (min-width: 576px) and (max-width: 991.98px) {
+    .product-title {
+        font-size: 0.82rem;
+    }
+}
+
+/* Desktop Large (>= 1200px) */
+@media (min-width: 1200px) {
+    .container {
+        max-width: 1200px;
+    }
+}
+
+/* === Animações === */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.product-card {
+    animation: fadeInUp 0.4s ease forwards;
+}
+
+/* Stagger animation */
+.col-6:nth-child(1) .product-card { animation-delay: 0.05s; }
+.col-6:nth-child(2) .product-card { animation-delay: 0.1s; }
+.col-6:nth-child(3) .product-card { animation-delay: 0.15s; }
+.col-6:nth-child(4) .product-card { animation-delay: 0.2s; }
+
+/* === Loading Skeleton === */
+.skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* === Selection Color === */
+::selection {
+    background: var(--primary);
+    color: #fff;
+}

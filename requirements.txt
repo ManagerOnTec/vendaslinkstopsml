@@ -1,0 +1,6 @@
+Django>=5.0,<6.0
+django-environ>=0.11.0
+gunicorn>=21.2.0
+whitenoise>=6.5.0
+Pillow>=10.0.0
+playwright>=1.40.0

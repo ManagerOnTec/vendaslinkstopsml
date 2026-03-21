@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load produto_tags %}
+
+{% block title %}
+{% if categoria_atual %}{{ categoria_atual|title }} - {% endif %}{{ SITE_NAME }} - Melhores Ofertas do Mercado Livre
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- Anúncios do Topo -->
+    {% for anuncio in anuncios_topo %}
+    <div class="ad-block ad-topo mb-4 text-center">
+        {{ anuncio.codigo_html|safe }}
+    </div>
+    {% endfor %}
+
+    <!-- Header da Página -->
+    <div class="page-header mb-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+            <div>
+                {% if busca_atual %}
+                    <h1 class="h4 fw-bold text-dark mb-1">
+                        <i class="bi bi-search me-2"></i>Resultados para "{{ busca_atual }}"
+                    </h1>
+                {% elif categoria_atual %}
+                    <h1 class="h4 fw-bold text-dark mb-1">
+                        <i class="bi bi-tag-fill me-2 text-primary"></i>{{ categoria_atual|title }}
+                    </h1>
+                {% else %}
+                    <h1 class="h4 fw-bold text-dark mb-1">
+                        <i class="bi bi-fire me-2 text-danger"></i>Ofertas em Destaque
+                    </h1>
+                {% endif %}
+                <p class="text-muted small mb-0">
+                    {{ page_obj.paginator.count }} produto{{ page_obj.paginator.count|pluralize:"s" }} encontrado{{ page_obj.paginator.count|pluralize:"s" }}
+                </p>
+            </div>
+            {% if busca_atual or categoria_atual %}
+            <a href="{% url 'produtos:lista' %}" class="btn btn-outline-secondary btn-sm mt-2 mt-md-0">
+                <i class="bi bi-x-circle me-1"></i>Limpar filtros
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if produtos %}
+    <!-- Grid de Produtos -->
+    <div class="row g-3 g-md-4">
+        {% for produto in produtos %}
+
+        <!-- Card do Produto -->
+        <div class="col-6 col-md-4 col-lg-3">
+            <a href="{{ produto.link_afiliado }}" target="_blank" rel="noopener noreferrer nofollow"
+               class="text-decoration-none product-card-link">
+                <div class="card product-card h-100 border-0 shadow-sm">
+                    {% if produto.destaque %}
+                    <div class="badge-destaque">
+                        <span class="badge bg-danger">
+                            <i class="bi bi-star-fill me-1"></i>Destaque
+                        </span>
+                    </div>
+                    {% endif %}
+
+                    {% if produto.preco_original and produto.preco %}
+                    <div class="badge-desconto">
+                        <span class="badge bg-success">Oferta</span>
+                    </div>
+                    {% endif %}
+
+                    <div class="card-img-wrapper">
+                        <img src="{{ produto.get_imagem }}"
+                             class="card-img-top"
+                             alt="{{ produto.titulo }}"
+                             loading="lazy"
+                             onerror="this.src='{% static 'images/no-image.png' %}'">
+                    </div>
+
+                    <div class="card-body d-flex flex-column p-3">
+                        <h2 class="card-title product-title">{{ produto.titulo }}</h2>
+
+                        {% if produto.categoria %}
+                        <span class="badge bg-light text-primary border mb-2 align-self-start small-badge">
+                            {{ produto.categoria.nome }}
+                        </span>
+                        {% endif %}
+
+                        <div class="mt-auto">
+                            {% if produto.preco_original %}
+                            <p class="preco-original text-muted text-decoration-line-through mb-0 small">
+                                {{ produto.preco_original }}
+                            </p>
+                            {% endif %}
+
+                            {% if produto.preco %}
+                            <p class="preco-atual fw-bold text-success mb-2">
+                                {{ produto.preco }}
+                            </p>
+                            {% endif %}
+
+                            <div class="btn btn-warning btn-sm w-100 fw-semibold btn-comprar">
+                                <i class="bi bi-cart-check me-1"></i>Ver no Mercado Livre
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Inserir anúncio a cada N produtos -->
+        {% if anuncios_meio and forloop.counter|modulo:anuncio_intervalo and not forloop.last %}
+        <div class="col-12">
+            <div class="ad-block ad-meio my-3 text-center">
+                {% with anuncio_index=forloop.counter|divisibleby:anuncio_intervalo %}
+                {% for anuncio in anuncios_meio %}
+                {% if forloop.first %}
+                {{ anuncio.codigo_html|safe }}
+                {% endif %}
+                {% endfor %}
+                {% endwith %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% endfor %}
+    </div>
+
+    <!-- Paginação -->
+    {% if is_paginated %}
+    <nav aria-label="Navegação de páginas" class="mt-5">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if busca_atual %}&q={{ busca_atual }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual }}{% endif %}">
+                    <i class="bi bi-chevron-left"></i> Anterior
+                </a>
+            </li>
+            {% endif %}
+
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                <li class="page-item active">
+                    <span class="page-link">{{ num }}</span>
+                </li>
+                {% elif num > page_obj.number|add_num:"-3" and num < page_obj.number|add_num:"3" %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ num }}{% if busca_atual %}&q={{ busca_atual }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual }}{% endif %}">
+                        {{ num }}
+                    </a>
+                </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if busca_atual %}&q={{ busca_atual }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual }}{% endif %}">
+                    Próxima <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+        <p class="text-center text-muted small">
+            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+        </p>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <!-- Sem produtos -->
+    <div class="text-center py-5">
+        <i class="bi bi-search display-1 text-muted"></i>
+        <h3 class="mt-3 text-muted">Nenhum produto encontrado</h3>
+        <p class="text-muted">
+            {% if busca_atual %}
+            Tente buscar com outros termos.
+            {% else %}
+            Em breve teremos novidades para você!
+            {% endif %}
+        </p>
+        <a href="{% url 'produtos:lista' %}" class="btn btn-primary">
+            <i class="bi bi-house me-1"></i>Ver todos os produtos
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- Anúncios do Rodapé -->
+    {% for anuncio in anuncios_rodape %}
+    <div class="ad-block ad-rodape mt-4 text-center">
+        {{ anuncio.codigo_html|safe }}
+    </div>
+    {% endfor %}
+
+</div>
+{% endblock %}
