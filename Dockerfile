@@ -10,11 +10,10 @@ ENV PORT=8080
 WORKDIR /app
 
 # Instalar dependências do sistema (MySQL + Playwright + imagens)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Build / MySQL
-    pkg-config \
+RUN apt-get update && apt-get install -y \
     build-essential \
     default-libmysqlclient-dev \
+    pkg-config \
     libmariadb-dev \
     libmariadb-dev-compat \
     # Imagens (Pillow)
@@ -45,7 +44,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copiar e instalar dependências Python
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
 
 # Instalar Chromium para Playwright
 RUN playwright install --with-deps chromium
@@ -55,11 +56,7 @@ COPY . .
 
 
 # Expor porta
-EXPOSE ${PORT}
+EXPOSE 8080
 
 # Comando de execução
-CMD exec gunicorn vendaslinkstopsml.wsgi:application \
-    --bind 0.0.0.0:${PORT} \
-    --workers 2 \
-    --threads 4 \
-    --timeout 120
+CMD ["gunicorn", "vendaslinkstopsml.wsgi:application", "--bind", "0.0.0.0:8080"]
