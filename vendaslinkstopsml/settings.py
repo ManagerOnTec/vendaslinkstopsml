@@ -141,7 +141,7 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') 
     SECURE_SSL_REDIRECT = True 
     # Isso força o Django a tratar as URLs como HTTPS 
-    DEFAULT_FILE_STORAGE = 'managerontec_project.storage_backends.PrivateMediaStorage' 
+    DEFAULT_FILE_STORAGE = 'vendaslinkstopsml.storage_backends.PrivateMediaStorage' 
     MEDIA_URL = f'https://storage.googleapis.com/{GS_BUCKET_NAME}/media/' 
 else: 
     MEDIA_URL = '/media/'
