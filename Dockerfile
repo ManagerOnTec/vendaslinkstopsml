@@ -11,8 +11,13 @@ WORKDIR /app
 
 # Instalar dependências do sistema (incluindo Chromium para Playwright)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+
     libjpeg-dev \
     zlib1g-dev \
+    pkg-config \
+    build-essential \
+    libmariadb-dev \
+    libmariadb-dev-compat \
     # Dependências do Chromium/Playwright
     libnss3 \
     libnspr4 \
@@ -41,7 +46,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Instalar Chromium para Playwright
-RUN playwright install chromium
+RUN playwright install --with-deps chromium
 
 # Copiar código do projeto
 COPY . .
