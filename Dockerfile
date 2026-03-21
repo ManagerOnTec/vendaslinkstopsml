@@ -46,8 +46,6 @@ RUN playwright install chromium
 # Copiar código do projeto
 COPY . .
 
-# Coletar static files
-RUN python manage.py collectstatic --noinput
 
 # Expor porta
 EXPOSE ${PORT}
