@@ -9,15 +9,17 @@ ENV PORT=8080
 # Diretório de trabalho
 WORKDIR /app
 
-# Instalar dependências do sistema (incluindo Chromium para Playwright)
+# Instalar dependências do sistema (MySQL + Playwright + imagens)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-
-    libjpeg-dev \
-    zlib1g-dev \
+    # Build / MySQL
     pkg-config \
     build-essential \
+    default-libmysqlclient-dev \
     libmariadb-dev \
     libmariadb-dev-compat \
+    # Imagens (Pillow)
+    libjpeg-dev \
+    zlib1g-dev \
     # Dependências do Chromium/Playwright
     libnss3 \
     libnspr4 \
