@@ -53,9 +53,12 @@ RUN playwright install --with-deps chromium
 # Copiar código do projeto
 COPY . .
 
+# Copiar e dar permissão ao entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Expor porta
 EXPOSE 8080
 
 # Comando de execução
-CMD ["gunicorn", "vendaslinkstopsml.wsgi:application", "--bind", "0.0.0.0:8080"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

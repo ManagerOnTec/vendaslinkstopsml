@@ -2,20 +2,18 @@
 Django>=5.0,<6.0
 gunicorn>=21.2.0
 whitenoise>=6.5.0
-pillow==12.1.0
+Pillow>=10.0.0
 python-decouple==3.8
 playwright>=1.40.0
 django-storages==1.14.6
-requests==2.31.0
-sqlparse==0.4.3
-tzdata==2024.5
-urllib3==2.0.3
-dj-database-url==3.1.0
-google-api-core==2.29.0
-google-auth==2.48.0
-google-cloud-core==2.5.0
-google-cloud-storage==3.9.0
-google-crc32c==1.8.0
-google-resumable-media==2.8.0
-googleapis-common-protos==1.72.0
 mysqlclient>=2.2.0
+# --- GCP CLOUD STORAGE (PRODUÇÃO APENAS) ---
+# Descomente essas linhas quando fizer deploy em produção no GCP Cloud Run
+google-api-core>=2.29.0
+google-auth>=2.48.0
+google-cloud-core>=2.5.0
+google-cloud-storage>=3.9.0
+google-crc32c>=1.8.0
+google-resumable-media>=2.8.0
+googleapis-common-protos>=1.72.0
+

@@ -4,20 +4,29 @@ from decouple import config, Csv
 from pathlib import Path
 
 # --- CONFIGURAÇÃO PARA GCP E PROXY --- 
-CSRF_TRUSTED_ORIGINS = [ 
-    f"https://{host}" for host in config("ALLOWED_HOSTS", default="", cast=Csv()) 
-]
+def _parse_hosts(hosts_str):
+    """Remove portas de hostnames, deixa apenas domínio/IP"""
+    return [s.split(':')[0].strip() for s in hosts_str.split(',') if s.strip()]
 
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS", 
+    default="localhost,127.0.0.1", 
+    cast=_parse_hosts
+)
+
+CSRF_TRUSTED_ORIGINS = [
+    f"https://{host}" for host in ALLOWED_HOSTS
+] + [
+    f"http://{host}" for host in ALLOWED_HOSTS if 'localhost' in host or '127.0.0.1' in host
+]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- SEGURANÇA --- 
-SECRET_KEY = config('SECRET_KEY') 
-DEBUG = config('DEBUG', default=False, cast=bool)
-
-ALLOWED_HOSTS = config( "ALLOWED_HOSTS", default="", cast=lambda v: [s.strip() for s in v.split(",") if s] )
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production-abc123xyz789') 
+DEBUG = config('DEBUG', default=True, cast=bool)
 
 
 # Application definition
@@ -29,10 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
-    'storages',  # Google Cloud Storage
     'produtos',
 ]
-
 
 
 MIDDLEWARE = [
@@ -68,7 +75,8 @@ TEMPLATES = [
 WSGI_APPLICATION = 'vendaslinkstopsml.wsgi.application'
 
 # --- BANCO DE DADOS ---
-USE_SQLITE = config("USE_SQLITE", default=False, cast=bool)
+# Usa SQLite por padrão (dev), MySQL apenas em produção com USE_SQLITE=False
+USE_SQLITE = config("USE_SQLITE", default=True, cast=bool)
 
 if USE_SQLITE:
     DATABASES = {
@@ -81,13 +89,13 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': config('DB_NAME'),
-            'USER': config('DB_USER'),
-            'PASSWORD': config('DB_PASSWORD'),
-            'HOST': config('DB_HOST'),
+            'NAME': config('DB_NAME', default='vendaslinkstopsml'),
+            'USER': config('DB_USER', default='root'),
+            'PASSWORD': config('DB_PASSWORD', default=''),
+            'HOST': config('DB_HOST', default='localhost'),
             'PORT': '3306',
             'OPTIONS': {
-                "unix_socket": config("DB_SOCKET"), 
+                "unix_socket": config("DB_SOCKET", default=""), 
                 "charset": "utf8mb4",
             }
         }
@@ -118,9 +126,9 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # --- VARIÁVEIS DE SITE CUSTOMIZADAS ---
-SITE_NAME = config('SITE_NAME')
-SITE_DESCRIPTION = config('SITE_DESCRIPTION')
-GOOGLE_ADSENSE_ID = config('GOOGLE_ADSENSE_ID')
+SITE_NAME = config('SITE_NAME', default='Vendas Links Top SML')
+SITE_DESCRIPTION = config('SITE_DESCRIPTION', default='Encontre os melhores links de vendas para seus produtos favoritos.')
+GOOGLE_ADSENSE_ID = config('GOOGLE_ADSENSE_ID', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='webmaster@localhost')
 
 # Paginação
@@ -131,10 +139,11 @@ ANUNCIO_A_CADA_N_PRODUTOS = 6
 CRON_SECRET = config('CRON_SECRET', default='')
 
 # --- CONFIGURAÇÃO GCP STORAGE BUCKET E MEDIA ---
-if not DEBUG:
+if not DEBUG: 
+    INSTALLED_APPS.append('storages')
     # Produção: usar GCP Storage
-    GS_PROJECT_ID = config('GS_PROJECT_ID')
-    GS_BUCKET_NAME = config('GS_BUCKET_NAME')
+    GS_PROJECT_ID = config('GS_PROJECT_ID', default='')
+    GS_BUCKET_NAME = config('GS_BUCKET_NAME', default='')
     GS_EXPIRATION = timedelta(minutes=30)
     GS_QUERYSTRING_AUTH = True
     GS_DEFAULT_ACL = None
