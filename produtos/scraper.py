@@ -558,23 +558,23 @@ def extrair_dados_produto(url: str) -> dict:
     """Wrapper síncrono para a função assíncrona de extração.
     
     Funciona em threads do Django (sem event loop) e em contextos com loop já rodando.
+    Compatível com SQLite (dev com admin) e MySQL (produção com workers).
     """
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        # Não há event loop na thread - criar um novo
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    if loop.is_running():
-        # Event loop já está rodando (contexto aninhado)
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            future = pool.submit(asyncio.run, _extrair_dados_ml(url))
-            return future.result(timeout=60)
-    else:
-        # Event loop existe mas não está rodando - usar normalmente
-        return loop.run_until_complete(_extrair_dados_ml(url))
+        # Abordagem 1: Tentar asyncio.run() diretamente (mais robusto)
+        # Funciona na maioria dos casos: threads de worker, novas threads, etc
+        return asyncio.run(_extrair_dados_ml(url))
+    except RuntimeError as e:
+        # Se falhar, pode ser porque há um loop já rodando
+        # Nesse caso, precisa de uma thread nova
+        if 'asyncio.run() cannot be called from a running event loop' in str(e):
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, _extrair_dados_ml(url))
+                return future.result(timeout=60)
+        else:
+            # Algum outro erro RuntimeError - relancar
+            raise
 
 
 def processar_produto_automatico(produto):
