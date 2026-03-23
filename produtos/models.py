@@ -242,6 +242,16 @@ class ProdutoAutomatico(models.Model):
         blank=True,
         verbose_name="Última Extração"
     )
+    falhas_consecutivas = models.IntegerField(
+        default=0,
+        verbose_name="Falhas Consecutivas",
+        help_text="Número de tentativas de atualização que falharam. Ao atingir limite, produto é desativado automaticamente."
+    )
+    motivo_desativacao = models.TextField(
+        blank=True,
+        verbose_name="Motivo da Desativação",
+        help_text="Registra o motivo automático de desativação (ex: 5 falhas consecutivas)"
+    )
 
     class Meta:
         verbose_name = "Produto Automático"

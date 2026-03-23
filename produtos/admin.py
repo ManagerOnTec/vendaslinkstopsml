@@ -97,9 +97,9 @@ class AnuncioAdmin(admin.ModelAdmin):
 class ProdutoAutomaticoAdmin(admin.ModelAdmin):
     list_display = (
         'titulo_display', 'preview_imagem', 'preco', 'status_badge',
-        'categoria', 'destaque', 'ativo', 'ordem', 'criado_em'
+        'falhas_consecutivas', 'categoria', 'destaque', 'ativo', 'ordem', 'criado_em'
     )
-    list_filter = ('status_extracao', 'ativo', 'destaque', 'categoria')
+    list_filter = ('status_extracao', 'ativo', 'destaque', 'categoria', 'falhas_consecutivas')
     search_fields = ('titulo', 'link_afiliado')
     list_editable = ('destaque', 'ativo', 'ordem')
     list_per_page = 25
@@ -107,9 +107,10 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
     readonly_fields = (
         'titulo', 'imagem_url', 'preco', 'preco_original', 'descricao',
         'url_final', 'status_extracao', 'erro_extracao',
-        'preview_imagem_grande', 'criado_em', 'atualizado_em', 'ultima_extracao'
+        'preview_imagem_grande', 'criado_em', 'atualizado_em', 'ultima_extracao',
+        'falhas_consecutivas', 'motivo_desativacao'
     )
-    actions = ['extrair_dados_action', 'reextrair_dados_action']
+    actions = ['extrair_dados_action', 'reextrair_dados_action', 'resetar_falhas_action']
 
     fieldsets = (
         ('Link do Produto (COLE AQUI)', {
@@ -134,6 +135,10 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
         ('Status da Extração', {
             'fields': ('status_extracao', 'erro_extracao', 'ultima_extracao'),
             'classes': ('collapse',)
+        }),
+        ('Monitoramento de Falhas', {
+            'fields': ('falhas_consecutivas', 'motivo_desativacao'),
+            'description': 'Produto é desativado automaticamente após 5 falhas consecutivas'
         }),
         ('Datas', {
             'fields': ('criado_em', 'atualizado_em'),
@@ -231,6 +236,17 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
     @admin.action(description='Re-extrair dados (forçar atualização)')
     def reextrair_dados_action(self, request, queryset):
         self.extrair_dados_action(request, queryset)
+    
+    @admin.action(description='Resetar contador de falhas')
+    def resetar_falhas_action(self, request, queryset):
+        atualizado = queryset.update(
+            falhas_consecutivas=0,
+            motivo_desativacao=''
+        )
+        messages.success(
+            request,
+            f'{atualizado} produto(s) tiveram contador de falhas resetado.'
+        )
 
 
 # ============================================================
