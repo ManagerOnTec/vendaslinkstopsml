@@ -142,7 +142,7 @@ Ofertas ML{% if busca_atual %} - {{ busca_atual }}{% endif %} | {{ SITE_NAME }}
         <ul class="pagination justify-content-center">
             {% if page_obj.has_previous %}
             <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if busca_atual %}&q={{ busca_atual }}{% endif %}">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if busca_atual %}&q={{ busca_atual }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual }}{% endif %}">
                     <i class="bi bi-chevron-left"></i> Anterior
                 </a>
             </li>
@@ -155,7 +155,7 @@ Ofertas ML{% if busca_atual %} - {{ busca_atual }}{% endif %} | {{ SITE_NAME }}
                 </li>
                 {% elif num > page_obj.number|add_num:"-3" and num < page_obj.number|add_num:"3" %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ num }}{% if busca_atual %}&q={{ busca_atual }}{% endif %}">
+                    <a class="page-link" href="?page={{ num }}{% if busca_atual %}&q={{ busca_atual }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual }}{% endif %}">
                         {{ num }}
                     </a>
                 </li>
@@ -164,7 +164,7 @@ Ofertas ML{% if busca_atual %} - {{ busca_atual }}{% endif %} | {{ SITE_NAME }}
 
             {% if page_obj.has_next %}
             <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if busca_atual %}&q={{ busca_atual }}{% endif %}">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if busca_atual %}&q={{ busca_atual }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual }}{% endif %}">
                     Próxima <i class="bi bi-chevron-right"></i>
                 </a>
             </li>

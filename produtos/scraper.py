@@ -43,6 +43,7 @@ async def _extrair_dados_ml(url: str) -> dict:
         'preco': '',
         'preco_original': '',
         'descricao': '',
+        'categoria': '',
         'url_final': '',
     }
 
@@ -105,6 +106,78 @@ async def _extrair_dados_ml(url: str) -> dict:
                         `meta[property="${prop}"]`
                     ) || document.querySelector(`meta[name="${prop}"]`);
                     return el ? el.content : '';
+                };
+
+                // Função para extrair categoria da breadcrumb
+                const extractCategory = () => {
+                    try {
+                        // Estratégia 1: meta breadcrumb (JSON-LD)
+                        const breadcrumbMeta = document.querySelector('script[type="application/ld+json"]');
+                        if (breadcrumbMeta) {
+                            const data = JSON.parse(breadcrumbMeta.textContent);
+                            if (data.itemListElement && data.itemListElement.length > 1) {
+                                const secondItem = data.itemListElement[1];
+                                if (secondItem && secondItem.name) {
+                                    return secondItem.name.trim();
+                                }
+                            }
+                        }
+                    } catch (e) {}
+
+                    try {
+                        // Estratégia 2: elemento andes-breadcrumb no DOM
+                        const breadcrumbEl = document.querySelector('.andes-breadcrumb');
+                        if (breadcrumbEl) {
+                            const items = breadcrumbEl.querySelectorAll('.andes-breadcrumb__item');
+                            if (items.length > 1) {
+                                const categoryText = items[1].textContent.trim();
+                                if (categoryText && categoryText !== 'Home' && categoryText.length > 0) {
+                                    return categoryText;
+                                }
+                            }
+                        }
+                    } catch (e) {}
+
+                    try {
+                        // Estratégia 3: em páginas de perfil social, procurar breadcrumb no link do produto
+                        const productLink = document.querySelector('a[href*="/p/"], a[href*="/item/"]');
+                        if (productLink) {
+                            // Fazer fetch do link para extrair categoria
+                            const productUrl = productLink.href;
+                            // Extrair do padrão de URL: /c/CATEGORIA/p/ID
+                            const categoryMatch = productUrl.match(/\/c\/([^\/]+)/);
+                            if (categoryMatch && categoryMatch[1]) {
+                                const categoryFromUrl = categoryMatch[1]
+                                    .replace(/-/g, ' ')
+                                    .split(' ')
+                                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                    .join(' ');
+                                if (categoryFromUrl.length > 2) {
+                                    return categoryFromUrl;
+                                }
+                            }
+                        }
+                    } catch (e) {}
+
+                    try {
+                        // Estratégia 4: tenta og:breadcrumb (se existir)
+                        const allScripts = document.querySelectorAll('script[type="application/ld+json"]');
+                        for (const script of allScripts) {
+                            try {
+                                const data = JSON.parse(script.textContent);
+                                if (data['@type'] === 'BreadcrumbList' && data.itemListElement) {
+                                    if (data.itemListElement.length > 1) {
+                                        const secondItem = data.itemListElement[1];
+                                        if (secondItem && secondItem.name) {
+                                            return secondItem.name.trim();
+                                        }
+                                    }
+                                }
+                            } catch (e) {}
+                        }
+                    } catch (e) {}
+
+                    return '';
                 };
 
                 // Função auxiliar para extrair preço de um andes-money-amount
@@ -216,6 +289,7 @@ async def _extrair_dados_ml(url: str) -> dict:
                 let preco = '';
                 let precoOriginal = '';
                 let descricao = '';
+                let categoria = extractCategory();
 
                 if (isPDP) {
                     // ========================================
@@ -452,6 +526,7 @@ async def _extrair_dados_ml(url: str) -> dict:
                     preco: preco,
                     preco_original: precoOriginal,
                     descricao: (descricao || '').substring(0, 500),
+                    categoria: categoria,
                     page_type: isPDP ? 'pdp' : (isSocial ? 'social' : 'other')
                 };
             }''')
@@ -467,6 +542,8 @@ async def _extrair_dados_ml(url: str) -> dict:
                 dados['preco'] = f"R$ {dados['preco']}"
             if dados['preco_original'] and not dados['preco_original'].startswith('R$'):
                 dados['preco_original'] = f"R$ {dados['preco_original']}"
+            
+            logger.info(f"DEBUG: Após formatação - categoria: '{dados.get('categoria', '')}'")
 
         except Exception as e:
             logger.error(f"Erro ao extrair dados de {url}: {e}")
@@ -494,13 +571,15 @@ def extrair_dados_produto(url: str) -> dict:
 
 def processar_produto_automatico(produto):
     """Processa um ProdutoAutomatico: extrai dados do ML e atualiza o registro."""
-    from .models import StatusExtracao
+    from .models import StatusExtracao, Categoria
+    from django.utils.text import slugify
 
     produto.status_extracao = StatusExtracao.PROCESSANDO
     produto.erro_extracao = ''
     produto.save(update_fields=['status_extracao', 'erro_extracao'])
 
     try:
+        logger.info(f"🔄 Iniciando processamento do link: {produto.link_afiliado}")
         dados = extrair_dados_produto(produto.link_afiliado)
 
         # Detectar se o ML redirecionou para uma página diferente
@@ -529,6 +608,58 @@ def processar_produto_automatico(produto):
             logger.info(f'Dados mantidos para produto redirecionado: {produto.titulo}')
             return True
 
+        # Processar categoria se extraída
+        categoria_obj = None
+        categoria_nome = dados.get('categoria', '').strip()
+        
+        logger.info(f"📦 Page Type: {page_type}")
+        logger.info(f"📊 Categoria extraída inicialmente: '{categoria_nome}'")
+        
+        # Se não extraiu categoria, tentar um fallback simples
+        if not categoria_nome:
+            logger.info(f"⚠️ Tentando extrair categoria por fallback...")
+            # Tentar extrair palavras-chave do título
+            titulo = dados.get('titulo', '').lower()
+            if titulo:
+                # Dicionário de categorias comuns no ML
+                categorias_keywords = {
+                    'Eletrônicos': ['eletrônico', 'computador', 'smartphone', 'celular', 'notebook', 'tablet', 'fone', 'webcam', 'monitor', 'tv', 'smart'],
+                    'Informática': ['notebook', 'computador', 'pc', 'processador', 'placa mãe', 'memória ram', 'ssd', 'teclado', 'mouse', 'impressora'],
+                    'Esportes': ['bola', 'tênis', 'espor', 'yoga', 'fitness', 'piscina', 'corrida', 'bicicleta', 'academia'],
+                    'Moda': ['roupa', 'calça', 'camiseta', 'jaqueta', 'sapato', 'blusa', 'vestido', 'tênis esportivo'],
+                    'Casa': ['cama', 'mesa', 'cadeira', 'sofá', 'cortina', 'tapete', 'louça', 'utensílio de cozinha'],
+                }
+                
+                for categoria_chave, keywords in categorias_keywords.items():
+                    for keyword in keywords:
+                        if keyword in titulo:
+                            categoria_nome = categoria_chave
+                            logger.info(f"✅ Categoria identificada por keyword: '{categoria_nome}'")
+                            break
+                    if categoria_nome:
+                        break
+        
+        if categoria_nome:
+            # Criar ou obter a categoria
+            categoria_slug = slugify(categoria_nome)
+            logger.info(f"🔍 Buscando/criando categoria com slug: '{categoria_slug}'")
+            
+            categoria_obj, criada = Categoria.objects.get_or_create(
+                slug=categoria_slug,
+                defaults={
+                    'nome': categoria_nome,
+                    'ativo': True,
+                    'ordem': 999  # Vai pro final, admin pode reordenar
+                }
+            )
+            if criada:
+                logger.info(f"✨ Categoria CRIADA automaticamente: {categoria_nome} (ID: {categoria_obj.id})")
+            else:
+                logger.info(f"♻️ Categoria EXISTENTE utilizada: {categoria_nome} (ID: {categoria_obj.id})")
+        else:
+            logger.warning(f"⚠️ Nenhuma categoria foi extraída do link: {produto.link_afiliado}")
+            logger.warning(f"   Página type: {page_type}")
+
         # Atualizar dados normalmente
         produto.titulo = dados.get('titulo', '') or produto.titulo
         produto.imagem_url = dados.get('imagem_url', '') or produto.imagem_url
@@ -536,16 +667,28 @@ def processar_produto_automatico(produto):
         produto.preco_original = dados.get('preco_original', '') or produto.preco_original
         produto.descricao = dados.get('descricao', '') or produto.descricao
         produto.url_final = dados.get('url_final', '') or produto.url_final
+        
+        if categoria_obj:
+            produto.categoria = categoria_obj
+            logger.info(f"✅ Categoria ATRIBUÍDA ao produto: {produto.titulo[:50]}... -> {categoria_obj.nome}")
+        else:
+            logger.warning(f"ℹ️ Nenhuma categoria para atribuir ao produto: {produto.titulo[:50]}...")
+        
         produto.status_extracao = StatusExtracao.SUCESSO
         produto.ultima_extracao = timezone.now()
         produto.save()
 
-        logger.info(f"Dados extraídos com sucesso para: {produto.titulo}")
+        logger.info(f"✅ Dados extraídos com sucesso para: {produto.titulo[:50]}...")
+        logger.info(f"   📁 Categoria final: {produto.categoria.nome if produto.categoria else 'Nenhuma'}")
+        logger.info(f"   💰 Preço: {produto.preco}")
+        logger.info(f"   📷 Imagem: {bool(produto.imagem_url)}")
         return True
 
     except Exception as e:
         produto.status_extracao = StatusExtracao.ERRO
         produto.erro_extracao = str(e)
         produto.save(update_fields=['status_extracao', 'erro_extracao'])
-        logger.error(f"Erro ao processar produto {produto.id}: {e}")
+        logger.error(f"❌ Erro ao processar produto {produto.id}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False

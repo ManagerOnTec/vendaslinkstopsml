@@ -57,22 +57,16 @@
                 <!-- Navegação entre páginas -->
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link {% if pagina_tipo == 'manual' or not pagina_tipo %}active{% endif %}"
+                        <a class="nav-link active"
                            href="{% url 'produtos:lista' %}">
-                            <i class="bi bi-grid-3x3-gap-fill me-1"></i>Curadoria
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if pagina_tipo == 'automatico' %}active{% endif %}"
-                           href="{% url 'produtos:lista_automatica' %}">
-                            <i class="bi bi-lightning-charge-fill me-1"></i>Ofertas ML
+                            <i class="bi bi-fire me-1"></i>Ofertas
                         </a>
                     </li>
                 </ul>
 
                 <!-- Barra de Busca -->
                 <form class="d-flex my-2 my-lg-0 search-form" method="GET"
-                      action="{% if pagina_tipo == 'automatico' %}{% url 'produtos:lista_automatica' %}{% else %}{% url 'produtos:lista' %}{% endif %}">
+                      action="{% url 'produtos:lista' %}">
                     <div class="input-group">
                         <input class="form-control border-0 shadow-none" type="search" name="q"
                                placeholder="Buscar produtos..." aria-label="Buscar"
@@ -91,7 +85,7 @@
     <div class="categorias-bar bg-white border-bottom py-2">
         <div class="container">
             <div class="d-flex flex-wrap gap-2 align-items-center justify-content-center">
-                <a href="{% if pagina_tipo == 'automatico' %}{% url 'produtos:lista_automatica' %}{% else %}{% url 'produtos:lista' %}{% endif %}"
+                <a href="{% url 'produtos:lista' %}"
                    class="btn btn-sm {% if not categoria_atual %}btn-primary{% else %}btn-outline-primary{% endif %} rounded-pill">
                     <i class="bi bi-grid-fill me-1"></i>Todos
                 </a>

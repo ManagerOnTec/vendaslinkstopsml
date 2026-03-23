@@ -3,6 +3,10 @@ import os
 from decouple import config, Csv
 from pathlib import Path
 
+# --- SEGURANÇA --- 
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production-abc123xyz789') 
+DEBUG = config('DEBUG', default=True, cast=bool)
+
 # --- CONFIGURAÇÃO PARA GCP E PROXY --- 
 def _parse_hosts(hosts_str):
     """Remove portas de hostnames, deixa apenas domínio/IP"""
@@ -10,23 +14,19 @@ def _parse_hosts(hosts_str):
 
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS", 
-    default="localhost,127.0.0.1", 
-    cast=_parse_hosts
+    default="", 
+    cast=lambda v: [s.strip() for s in v.split(",") if s]
 )
 
 CSRF_TRUSTED_ORIGINS = [
-    f"https://{host}" for host in ALLOWED_HOSTS
-] + [
-    f"http://{host}" for host in ALLOWED_HOSTS if 'localhost' in host or '127.0.0.1' in host
+    f"https://{host}" for host in config("ALLOWED_HOSTS", default="", cast=Csv())
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# --- SEGURANÇA --- 
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production-abc123xyz789') 
-DEBUG = config('DEBUG', default=True, cast=bool)
+
 
 
 # Application definition
