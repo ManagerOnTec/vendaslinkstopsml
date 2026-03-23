@@ -555,25 +555,39 @@ async def _extrair_dados_ml(url: str) -> dict:
 
 
 def extrair_dados_produto(url: str) -> dict:
-    """Wrapper síncrono para a função assíncrona de extração."""
+    """Wrapper síncrono para a função assíncrona de extração.
+    
+    Funciona em threads do Django (sem event loop) e em contextos com loop já rodando.
+    """
     try:
         loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _extrair_dados_ml(url))
-                return future.result(timeout=60)
-        else:
-            return loop.run_until_complete(_extrair_dados_ml(url))
     except RuntimeError:
-        return asyncio.run(_extrair_dados_ml(url))
+        # Não há event loop na thread - criar um novo
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    if loop.is_running():
+        # Event loop já está rodando (contexto aninhado)
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            future = pool.submit(asyncio.run, _extrair_dados_ml(url))
+            return future.result(timeout=60)
+    else:
+        # Event loop existe mas não está rodando - usar normalmente
+        return loop.run_until_complete(_extrair_dados_ml(url))
 
 
 def processar_produto_automatico(produto):
-    """Processa um ProdutoAutomatico: extrai dados do ML e atualiza o registro."""
+    """Processa um ProdutoAutomatico: extrai dados do ML e atualiza o registro.
+    
+    Implementa desativação automática: após 5 falhas consecutivas, o produto
+    é automaticamente desativado para economizar recursos.
+    """
     from .models import StatusExtracao, Categoria
     from django.utils.text import slugify
 
+    LIMITE_FALHAS = 2  # Constante de limite de falhas
+    
     produto.status_extracao = StatusExtracao.PROCESSANDO
     produto.erro_extracao = ''
     produto.save(update_fields=['status_extracao', 'erro_extracao'])
@@ -604,6 +618,12 @@ def processar_produto_automatico(produto):
             produto.status_extracao = StatusExtracao.SUCESSO
             produto.erro_extracao = 'Produto possivelmente indisponível (redirecionado)'
             produto.ultima_extracao = timezone.now()
+            
+            # ✅ SUCESSO - Resetar falhas
+            if produto.falhas_consecutivas > 0:
+                produto.falhas_consecutivas = 0
+                produto.motivo_desativacao = ''
+            
             produto.save()
             logger.info(f'Dados mantidos para produto redirecionado: {produto.titulo}')
             return True
@@ -676,6 +696,13 @@ def processar_produto_automatico(produto):
         
         produto.status_extracao = StatusExtracao.SUCESSO
         produto.ultima_extracao = timezone.now()
+        
+        # ✅ SUCESSO - Resetar falhas consecutivas
+        if produto.falhas_consecutivas > 0:
+            produto.falhas_consecutivas = 0
+            produto.motivo_desativacao = ''
+            logger.info(f"🔄 Contador de falhas RESETADO para {produto.titulo[:50]}...")
+        
         produto.save()
 
         logger.info(f"✅ Dados extraídos com sucesso para: {produto.titulo[:50]}...")
@@ -687,7 +714,24 @@ def processar_produto_automatico(produto):
     except Exception as e:
         produto.status_extracao = StatusExtracao.ERRO
         produto.erro_extracao = str(e)
-        produto.save(update_fields=['status_extracao', 'erro_extracao'])
+        
+        # ❌ ERRO - Incrementar falhas consecutivas
+        produto.falhas_consecutivas += 1
+        logger.warning(f"⚠️ Falha #{produto.falhas_consecutivas}/2 para produto {produto.id}")
+        
+        # 🛑 Se atingiu limite, desativar automaticamente
+        if produto.falhas_consecutivas >= LIMITE_FALHAS:
+            produto.ativo = False
+            produto.motivo_desativacao = (
+                f'Desativado automaticamente após 2 falhas consecutivas. '
+                f'Última tentativa: {timezone.now()}. Erro: {str(e)[:100]}'
+            )
+            logger.error(
+                f"🛑 DESATIVADO PRODUTO {produto.id}: {produto.titulo[:50]}... "
+                f"(após 2 falhas)"
+            )
+        
+        produto.save(update_fields=['status_extracao', 'erro_extracao', 'falhas_consecutivas', 'ativo', 'motivo_desativacao'])
         logger.error(f"❌ Erro ao processar produto {produto.id}: {e}")
         import traceback
         logger.error(traceback.format_exc())

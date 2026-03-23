@@ -145,11 +145,12 @@ class Command(BaseCommand):
     def _executar_atualizacao(
         self, agendamento=None, ids=None, apenas_ativos=True
     ):
-        """Executa a atualização dos produtos com desativação por falhas."""
-        inicio = time.time()
+        """Executa a atualização dos produtos.
         
-        # Constantes
-        LIMITE_FALHAS = 5  # Desativa após N falhas consecutivas
+        Nota: A lógica de desativação automática por falhas consecutivas
+        está centralizada em processar_produto_automatico() em scraper.py
+        """
+        inicio = time.time()
         
         # Selecionar produtos
         queryset = ProdutoAutomatico.objects.all()
@@ -169,7 +170,7 @@ class Command(BaseCommand):
 
         sucesso = 0
         erros = 0
-        desativados = 0
+        desativados_count = 0
         detalhes_list = []
 
         for produto in queryset:
@@ -178,69 +179,32 @@ class Command(BaseCommand):
                     f'  [{sucesso + erros + 1}/{total}] '
                     f'{produto.titulo[:50] or produto.link_afiliado[:50]}...'
                 )
+                
+                # Chamar scraper que já implementa toda a lógica de desativação
                 result = processar_produto_automatico(produto)
                 
                 if result:
-                    # ✅ SUCESSO - Resetar contagem de falhas
                     sucesso += 1
-                    if produto.falhas_consecutivas > 0:
-                        produto.falhas_consecutivas = 0
-                        produto.motivo_desativacao = ''
-                        produto.save(update_fields=['falhas_consecutivas', 'motivo_desativacao'])
-                    
                     detalhes_list.append(
                         f'✅ OK: {produto.titulo[:60]} -> {produto.preco}'
                     )
                 else:
-                    # ❌ ERRO - Incrementar falhas
                     erros += 1
-                    produto.falhas_consecutivas += 1
-                    
-                    # Verificar se atingiu limite de falhas
-                    if produto.falhas_consecutivas >= LIMITE_FALHAS:
-                        # 🛑 DESATIVAR AUTOMATICAMENTE
-                        produto.ativo = False
-                        produto.motivo_desativacao = (
-                            f'Desativado automaticamente após {LIMITE_FALHAS} falhas '
-                            f'consecutivas de atualização. Última tentativa: {timezone.now()}. '
-                            f'Erro: {produto.erro_extracao[:100]}'
-                        )
-                        produto.save()
-                        
-                        desativados += 1
+                    # Recarregar produto para ver se foi desativado
+                    produto.refresh_from_db()
+                    if not produto.ativo:
+                        desativados_count += 1
                         detalhes_list.append(
                             f'🛑 DESATIVADO: {produto.titulo[:60]} '
-                            f'(após {LIMITE_FALHAS} falhas)'
-                        )
-                        
-                        self.stdout.write(
-                            self.style.ERROR(
-                                f'  ⚠️  Produto desativado após {LIMITE_FALHAS} falhas: '
-                                f'{produto.titulo[:50]}'
-                            )
+                            f'(falhas: {produto.falhas_consecutivas})'
                         )
                     else:
-                        # Salvar incremento de falhas
-                        produto.save(update_fields=['falhas_consecutivas'])
                         detalhes_list.append(
-                            f'❌ ERRO ({produto.falhas_consecutivas}/{LIMITE_FALHAS}): '
+                            f'❌ ERRO ({produto.falhas_consecutivas}/5): '
                             f'{produto.titulo[:60]} -> {produto.erro_extracao[:50]}'
                         )
             except Exception as e:
                 erros += 1
-                produto.falhas_consecutivas += 1
-                
-                # Desativar se atingir limite
-                if produto.falhas_consecutivas >= LIMITE_FALHAS:
-                    produto.ativo = False
-                    produto.motivo_desativacao = (
-                        f'Desativado automaticamente após {LIMITE_FALHAS} falhas '
-                        f'consecutivas. Exceção: {str(e)[:100]}'
-                    )
-                    desativados += 1
-                
-                produto.save()
-                
                 detalhes_list.append(
                     f'⚠️  EXCEÇÃO: {produto.id} -> {str(e)[:80]}'
                 )
@@ -263,13 +227,13 @@ class Command(BaseCommand):
         # Output
         self.stdout.write('\n' + '='*60)
         self.stdout.write(self.style.SUCCESS(f'✅ Atualização concluída!'))
-        self.stdout.write(f'   Total: {total} | Sucesso: {sucesso} | Erros: {erros} | Desativados: {desativados}')
+        self.stdout.write(f'   Total: {total} | Sucesso: {sucesso} | Erros: {erros} | Desativados: {desativados_count}')
         self.stdout.write(f'   Tempo: {duracao:.2f}s')
         
-        if desativados > 0:
+        if desativados_count > 0:
             self.stdout.write(
                 self.style.ERROR(
-                    f'\n⚠️  {desativados} produto(s) foram DESATIVADOS por múltiplas falhas!'
+                    f'\n⚠️  {desativados_count} produto(s) foram DESATIVADOS por múltiplas falhas!'
                 )
             )
         

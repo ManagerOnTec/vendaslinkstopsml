@@ -138,7 +138,7 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
         }),
         ('Monitoramento de Falhas', {
             'fields': ('falhas_consecutivas', 'motivo_desativacao'),
-            'description': 'Produto é desativado automaticamente após 5 falhas consecutivas'
+            'description': 'Produto é desativado automaticamente após 2 falhas consecutivas'
         }),
         ('Datas', {
             'fields': ('criado_em', 'atualizado_em'),
@@ -189,7 +189,11 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
     status_badge.short_description = 'Status'
 
     def save_model(self, request, obj, form, change):
-        """Ao salvar, se o link mudou ou é novo, extrair dados automaticamente."""
+        """Ao salvar, SEMPRE tentar extrair dados do link.
+        
+        Se link é novo ou mudou, extrai automaticamente.
+        Se link não mudou mas salvou novamente, também extrai (conta tentativas).
+        """
         is_new = not obj.pk
         link_changed = False
 
@@ -202,21 +206,36 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
 
-        if is_new or link_changed:
-            # Extrair dados automaticamente
+        # SEMPRE chamar para contar as tentativas
+        # (não apenas quando link muda)
+        if is_new or link_changed or True:  # ← Sempre executa
             from .scraper import processar_produto_automatico
             success = processar_produto_automatico(obj)
+            
+            # Recarregar para pegar dados atualizados
+            obj.refresh_from_db()
+            
             if success:
                 messages.success(
                     request,
-                    f'Dados extraídos com sucesso para: {obj.titulo}'
+                    f'✅ Dados extraídos com sucesso para: {obj.titulo}'
                 )
             else:
-                messages.warning(
-                    request,
-                    f'Erro ao extrair dados. Verifique o link e tente novamente. '
-                    f'Erro: {obj.erro_extracao[:100]}'
-                )
+                # Mostrar contador de falhas
+                if obj.ativo:
+                    messages.warning(
+                        request,
+                        f'❌ Erro ao extrair dados. Tentativa {obj.falhas_consecutivas}/2. '
+                        f'Verifique o link. Próxima falha desativa o produto. '
+                        f'Erro: {obj.erro_extracao[:80]}'
+                    )
+                else:
+                    messages.error(
+                        request,
+                        f'🛑 Produto DESATIVADO após {obj.falhas_consecutivas} tentativas. '
+                        f'Corrija o link e clique em "Resetar contador de falhas" para tentar novamente. '
+                        f'Motivo: {obj.motivo_desativacao[:80]}...'
+                    )
 
     @admin.action(description='Extrair/Atualizar dados do Mercado Livre')
     def extrair_dados_action(self, request, queryset):
