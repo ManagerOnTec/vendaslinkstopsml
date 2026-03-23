@@ -14,7 +14,7 @@ from django.core.paginator import Paginator
 
 from .models import (
     Produto, ProdutoAutomatico, Categoria, Anuncio,
-    AgendamentoAtualizacao, LogAtualizacao, DiaSemana
+    AgendamentoAtualizacao, LogAtualizacao, DiaSemana, DocumentoLegal
 )
 
 logger = logging.getLogger(__name__)
@@ -323,3 +323,24 @@ class AtualizarProdutosAPIView(View):
             'erros': erros,
             'duracao_segundos': round(duracao, 2),
         }
+
+
+def pagina_legal(request, tipo):
+    """Renderiza página de documentos legais (Privacidade, Termos, Afiliados)."""
+    from django.shortcuts import render, get_object_or_404
+    
+    documento = get_object_or_404(DocumentoLegal, tipo=tipo)
+    return render(request, 'legal.html', {'documento': documento})
+
+
+def ads_txt(request):
+    """Retorna arquivo ads.txt para verificação do Google AdSense."""
+    from django.http import HttpResponse
+    
+    pub_id = getattr(settings, 'GOOGLE_ADSENSE_ID', '')
+    if not pub_id:
+        # ID padrão se não configurado
+        pub_id = 'pub-4703772286442200'
+    
+    conteudo = f"google.com, {pub_id}, DIRECT, f08c47fec0942fa0"
+    return HttpResponse(conteudo, content_type="text/plain")

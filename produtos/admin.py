@@ -3,7 +3,7 @@ from django.utils.html import format_html
 from django.contrib import messages
 from .models import (
     Produto, Categoria, Anuncio, ProdutoAutomatico,
-    AgendamentoAtualizacao, LogAtualizacao
+    AgendamentoAtualizacao, LogAtualizacao, DocumentoLegal
 )
 
 
@@ -448,6 +448,45 @@ class LogAtualizacaoAdmin(admin.ModelAdmin):
             color, obj.sucesso, obj.erros
         )
     resultado_badge.short_description = 'Resultado'
+
+
+@admin.register(DocumentoLegal)
+class DocumentoLegalAdmin(admin.ModelAdmin):
+    """Admin para gerenciar documentos legais: Privacidade, Termos e Afiliados."""
+    list_display = ('get_tipo_display', 'atualizado_em', 'criado_em')
+    list_filter = ('tipo',)
+    readonly_fields = ('criado_em', 'atualizado_em', 'preview_html')
+    search_fields = ('texto_html',)
+    ordering = ('tipo',)
+
+    fieldsets = (
+        ('Informações', {
+            'fields': ('tipo',)
+        }),
+        ('Conteúdo HTML', {
+            'fields': ('texto_html', 'preview_html'),
+            'description': 'Use tags HTML: &lt;p&gt;, &lt;h2&gt;, &lt;h3&gt;, &lt;b&gt;, &lt;i&gt;, &lt;ul&gt;, &lt;li&gt;, etc'
+        }),
+        ('Datas', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def preview_html(self, obj):
+        """Mostra preview do HTML no admin."""
+        if not obj.pk:
+            return "Salve o documento primeiro para ver o preview."
+        return format_html(
+            '<div style="border:1px solid #ddd;padding:15px;background:#f9f9f9;'
+            'border-radius:5px;max-height:400px;overflow-y:auto;">{}</div>',
+            obj.texto_html
+        )
+    preview_html.short_description = 'Preview do Conteúdo'
+
+    def get_tipo_display(self, obj):
+        return obj.get_tipo_display()
+    get_tipo_display.short_description = 'Tipo de Documento'
 
 
 # Personalizar o admin site

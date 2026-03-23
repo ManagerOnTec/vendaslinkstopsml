@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     ProdutosCombinedListView, CategoriaListView,
-    AtualizarProdutosAPIView
+    AtualizarProdutosAPIView, pagina_legal, ads_txt
 )
 
 app_name = 'produtos'
@@ -13,5 +13,9 @@ urlpatterns = [
     path('categoria/<slug:slug>/', CategoriaListView.as_view(), name='categoria'),
     # Endpoint para Cloud Scheduler / cron
     path('api/atualizar-produtos/', AtualizarProdutosAPIView.as_view(), name='api_atualizar'),
+    # Páginas legais
+    path('legal/<str:tipo>/', pagina_legal, name='pagina_legal'),
+    # Google AdSense verification
+    path('ads.txt', ads_txt, name='ads_txt'),
 ]
 

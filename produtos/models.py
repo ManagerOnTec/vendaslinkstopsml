@@ -365,3 +365,38 @@ class LogAtualizacao(models.Model):
 
     def __str__(self):
         return f"{self.executado_em.strftime('%d/%m/%Y %H:%M')} - {self.sucesso}/{self.total_produtos} OK"
+
+
+class DocumentoLegal(models.Model):
+    """Documentos legais: Políticas de Privacidade, Termos de Uso, Divulgação de Afiliados."""
+    TITULOS_CHOICES = [
+        ('privacidade', 'Política de Privacidade'),
+        ('termos', 'Termos de Uso'),
+        ('afiliados', 'Divulgação de Afiliados'),
+    ]
+
+    tipo = models.CharField(
+        max_length=20,
+        choices=TITULOS_CHOICES,
+        unique=True,
+        verbose_name="Tipo de Documento"
+    )
+    texto_html = models.TextField(
+        help_text="Use HTML para formatar (tags: p, h2, h3, b, i, ul, li, etc)"
+    )
+    atualizado_em = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Última atualização"
+    )
+    criado_em = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Criado em"
+    )
+
+    class Meta:
+        verbose_name = "Documento Legal"
+        verbose_name_plural = "Documentos Legais"
+        ordering = ['tipo']
+
+    def __str__(self):
+        return self.get_tipo_display()

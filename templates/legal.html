@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ documento.get_tipo_display }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <h1 class="mb-4">{{ documento.get_tipo_display }}</h1>
+            <hr>
+            
+            <div class="conteudo-legal" style="line-height: 1.8; color: #333;">
+                {{ documento.texto_html|safe }}
+            </div>
+
+            <hr class="mt-5 mb-4">
+            <small class="text-muted">
+                📅 Última atualização: {{ documento.atualizado_em|date:"d \d\e F \d\e Y" }}
+            </small>
+        </div>
+    </div>
+</div>
+
+<style>
+    .conteudo-legal h2 {
+        margin-top: 30px;
+        margin-bottom: 15px;
+        font-weight: 600;
+        color: #222;
+    }
+    
+    .conteudo-legal h3 {
+        margin-top: 20px;
+        margin-bottom: 10px;
+        font-weight: 600;
+        color: #444;
+    }
+    
+    .conteudo-legal p {
+        margin-bottom: 12px;
+    }
+    
+    .conteudo-legal ul, .conteudo-legal ol {
+        margin-left: 20px;
+        margin-bottom: 15px;
+    }
+    
+    .conteudo-legal li {
+        margin-bottom: 8px;
+    }
+    
+    .conteudo-legal b, .conteudo-legal strong {
+        font-weight: 600;
+        color: #222;
+    }
+    
+    .conteudo-legal i, .conteudo-legal em {
+        font-style: italic;
+        color: #666;
+    }
+</style>
+{% endblock %}

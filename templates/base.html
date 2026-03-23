@@ -130,6 +130,32 @@
                 </div>
             </div>
 
+            <!-- Links Legais e Anúncios -->
+            <div class="row mt-4 pt-3 border-top border-secondary">
+                <div class="col-12">
+                    <div class="d-flex flex-wrap justify-content-center gap-3 justify-content-md-between">
+                        <small class="text-muted">
+                            {% if GOOGLE_ADSENSE_ID %}
+                            <i class="bi bi-check-circle me-1"></i>Verificado com Google AdSense
+                            {% endif %}
+                        </small>
+                        <div class="text-center text-muted small d-flex flex-wrap justify-content-center gap-3">
+                            <a href="{% url 'produtos:pagina_legal' 'privacidade' %}" class="text-decoration-none text-muted" title="Leia nossa política de privacidade">
+                                Privacidade
+                            </a>
+                            <span>•</span>
+                            <a href="{% url 'produtos:pagina_legal' 'termos' %}" class="text-decoration-none text-muted" title="Leia nossos termos de uso">
+                                Termos de Uso
+                            </a>
+                            <span>•</span>
+                            <a href="{% url 'produtos:pagina_legal' 'afiliados' %}" class="text-decoration-none text-muted" title="Saiba mais sobre nossas divulgações de afiliados">
+                                Divulgação de Afiliados
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Anúncios do Rodapé -->
             {% block anuncios_rodape %}{% endblock %}
         </div>
