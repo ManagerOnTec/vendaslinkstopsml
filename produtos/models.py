@@ -151,6 +151,15 @@ class Anuncio(models.Model):
         return f"{self.nome} ({self.get_posicao_display()})"
 
 
+class Plataforma(models.TextChoices):
+    """Plataformas de e-commerce suportadas."""
+    MERCADO_LIVRE = 'mercado_livre', 'Mercado Livre'
+    AMAZON = 'amazon', 'Amazon'
+    SHOPEE = 'shopee', 'Shopee'
+    SHEIN = 'shein', 'Shein'
+    OUTRO = 'outro', 'Outro'
+
+
 class StatusExtracao(models.TextChoices):
     PENDENTE = 'pendente', 'Pendente'
     PROCESSANDO = 'processando', 'Processando...'
@@ -159,32 +168,40 @@ class StatusExtracao(models.TextChoices):
 
 
 class ProdutoAutomatico(models.Model):
-    """Produto com dados extraídos automaticamente do Mercado Livre.
+    """Produto com dados extraídos automaticamente de múltiplas plataformas.
     O utilizador cadastra apenas o link afiliado e o sistema extrai
     título, imagem, preço e descrição automaticamente."""
     link_afiliado = models.URLField(
         max_length=500,
         verbose_name="Link Afiliado",
-        help_text="Cole aqui o link do produto do Mercado Livre (ex: https://mercadolivre.com.br/... ou https://meli.la/...)"
+        help_text="Cole o link do produto (Mercado Livre, Amazon, Shopee, Shein, etc)"
+    )
+    # Plataforma detectada
+    plataforma = models.CharField(
+        max_length=20,
+        choices=Plataforma.choices,
+        default=Plataforma.OUTRO,
+        verbose_name="Plataforma",
+        help_text="Detectada automaticamente pela URL do link"
     )
     # Campos extraídos automaticamente
     titulo = models.CharField(
         max_length=500,
         blank=True,
         verbose_name="Título",
-        help_text="Extraído automaticamente do Mercado Livre"
+        help_text="Extraído automaticamente"
     )
     imagem_url = models.URLField(
         max_length=500,
         blank=True,
         verbose_name="URL da Imagem",
-        help_text="Extraída automaticamente do Mercado Livre"
+        help_text="Extraída automaticamente"
     )
     preco = models.CharField(
         max_length=100,
         blank=True,
         verbose_name="Preço",
-        help_text="Extraído automaticamente do Mercado Livre"
+        help_text="Extraído automaticamente"
     )
     preco_original = models.CharField(
         max_length=100,
@@ -195,7 +212,7 @@ class ProdutoAutomatico(models.Model):
     descricao = models.TextField(
         blank=True,
         verbose_name="Descrição",
-        help_text="Extraída automaticamente do Mercado Livre"
+        help_text="Extraída automaticamente"
     )
     url_final = models.URLField(
         max_length=500,
@@ -250,7 +267,7 @@ class ProdutoAutomatico(models.Model):
     motivo_desativacao = models.TextField(
         blank=True,
         verbose_name="Motivo da Desativação",
-        help_text="Registra o motivo automático de desativação (ex: 5 falhas consecutivas)"
+        help_text="Registra o motivo automático de desativação (ex: 2 falhas consecutivas)"
     )
 
     class Meta:

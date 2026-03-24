@@ -1,16 +1,18 @@
 """
-Módulo de scraping para extrair dados de produtos do Mercado Livre.
+Módulo de scraping para extrair dados de produtos de múltiplas plataformas.
 Utiliza Playwright (browser headless) para contornar proteções anti-bot.
 
-Suporta três tipos de página:
-1. Página de produto individual (PDP) - extrai dados diretamente
-2. Página de perfil social (afiliado) - extrai dados do produto em destaque
-3. Outras páginas (busca, categoria) - extrai do primeiro produto listado
+Suporta:
+1. Mercado Livre - Página de produto individual (PDP) ou perfil social
+2. Amazon - Página de detalle do produto
+3. Shopee - Página de produto
+4. Shein - Página de produto
 """
 import asyncio
 import logging
 import re
 from django.utils import timezone
+from .detector_plataforma import DetectorPlataforma, SELETORES, limpar_preco
 
 logger = logging.getLogger(__name__)
 
@@ -554,26 +556,284 @@ async def _extrair_dados_ml(url: str) -> dict:
     return dados
 
 
+async def _extrair_dados_amazon(url: str) -> dict:
+    """
+    Scraper especializado para produtos Amazon.
+    Extrai: título, preço, imagem, descrição com seletores específicos.
+    """
+    from playwright.async_api import async_playwright
+
+    dados = {
+        'titulo': '',
+        'imagem_url': '',
+        'preco': '',
+        'preco_original': '',
+        'descricao': '',
+        'categoria': '',
+        'url_final': '',
+        'plataforma': 'amazon',
+    }
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-blink-features=AutomationControlled']
+        )
+        context = await browser.new_context(
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            viewport={'width': 1366, 'height': 768}
+        )
+        page = await context.new_page()
+
+        try:
+            resp = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            if resp and resp.status >= 400:
+                raise Exception(f"HTTP {resp.status}")
+
+            await page.wait_for_timeout(3000)
+            dados['url_final'] = page.url
+
+            # Extrair dados específicos da Amazon
+            result = await page.evaluate('''() => {
+                const data = {
+                    titulo: '',
+                    preco: '',
+                    preco_original: '',
+                    imagem: '',
+                    descricao: '',
+                };
+
+                // ===== TÍTULO =====
+                // Estratégia 1: data-a-color com h1
+                let titleEl = document.querySelector('h1 span[data-a-color]');
+                if (titleEl) {
+                    data.titulo = titleEl.textContent.trim();
+                } else {
+                    // Estratégia 2: product-title em span
+                    titleEl = document.querySelector('#productTitle');
+                    if (titleEl) {
+                        data.titulo = titleEl.textContent.trim();
+                    } else {
+                        // Estratégia 3: meta og:title
+                        const metaTitle = document.querySelector('meta[property="og:title"]');
+                        if (metaTitle) {
+                            data.titulo = metaTitle.getAttribute('content').trim();
+                        }
+                    }
+                }
+
+                // ===== PREÇO =====
+                // Estratégia 1: corePriceDisplay_desktop_feature_div (preço principal)
+                let priceContainer = document.querySelector('[data-a-color="price"] span.a-price-whole');
+                if (priceContainer) {
+                    data.preco = priceContainer.textContent.trim();
+                } else {
+                    // Estratégia 2: a-price com classe de dinheiro
+                    priceContainer = document.querySelector('.a-price.a-text-price.a-size-medium.a-color-price span.a-price-whole');
+                    if (priceContainer) {
+                        data.preco = priceContainer.textContent.trim();
+                    } else {
+                        // Estratégia 3: buscar em qualquer data attribute de preço
+                        const allSpans = document.querySelectorAll('span[data-a-size]');
+                        for (const span of allSpans) {
+                            const text = span.textContent.trim();
+                            if (text.match(/^[R$\\d,.\\.]+/) && text.length < 20) {
+                                data.preco = text;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // ===== IMAGEM =====
+                // Estratégia 1: imagem principal (#landingImage)
+                let imgEl = document.querySelector('#landingImage, img#landingImage');
+                if (imgEl && imgEl.src && !imgEl.src.startsWith('data:')) {
+                    data.imagem = imgEl.src;
+                } else {
+                    // Estratégia 2: primeira imagem grande no carrossel
+                    imgEl = document.querySelector('img.s-image');
+                    if (imgEl && imgEl.src && !imgEl.src.startsWith('data:')) {
+                        data.imagem = imgEl.src;
+                    } else {
+                        // Estratégia 3: og:image meta tag
+                        const metaImg = document.querySelector('meta[property="og:image"]');
+                        if (metaImg) {
+                            data.imagem = metaImg.getAttribute('content');
+                        }
+                    }
+                }
+
+                // ===== DESCRIÇÃO =====
+                // Estratégia 1: Feature bullets
+                let descEl = document.querySelector('#feature-bullets');
+                if (descEl) {
+                    const items = descEl.querySelectorAll('li span');
+                    data.descricao = Array.from(items)
+                        .map(li => li.textContent.trim())
+                        .filter(text => text.length > 0)
+                        .slice(0, 3)
+                        .join(' • ');
+                } else {
+                    // Estratégia 2: og:description
+                    const metaDesc = document.querySelector('meta[property="og:description"]');
+                    if (metaDesc) {
+                        data.descricao = metaDesc.getAttribute('content');
+                    } else {
+                        // Estratégia 3: meta name description
+                        const metaDesc2 = document.querySelector('meta[name="description"]');
+                        if (metaDesc2) {
+                            data.descricao = metaDesc2.getAttribute('content');
+                        }
+                    }
+                }
+
+                return data;
+            }''')
+
+            dados['titulo'] = result.get('titulo', '').strip()[:500]
+            dados['preco'] = result.get('preco', '').strip()
+            
+            # Remover duplicações no preço (pode vir duplicado do DOM)
+            if dados['preco']:
+                parts = dados['preco'].split('R$')
+                dados['preco'] = parts[-1].strip() if parts else dados['preco']
+                if not dados['preco'].startswith('R$'):
+                    dados['preco'] = f"R$ {dados['preco']}" if dados['preco'] else ""
+                else:
+                    dados['preco'] = dados['preco'].strip()
+            
+            dados['preco_original'] = result.get('preco_original', '').strip()
+            dados['imagem_url'] = result.get('imagem', '').strip()
+            dados['descricao'] = result.get('descricao', '').strip()[:1000]
+
+            logger.info(f"✅ Extração Amazon: {dados['titulo'][:60]}")
+            logger.info(f"   💰 Preço: {dados['preco']}")
+            logger.info(f"   📷 Imagem: {'✓' if dados['imagem_url'] else '✗'}")
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao extrair de Amazon: {e}")
+            raise
+        finally:
+            await browser.close()
+
+    return dados
+
+
+async def _extrair_dados_genererico(url: str, plataforma: str) -> dict:
+    """
+    Extração genérica usando meta tags.
+    Fallback para plataformas que ainda não têm scraper especializado (Shopee, Shein, etc).
+    """
+    from playwright.async_api import async_playwright
+
+    dados = {
+        'titulo': '',
+        'imagem_url': '',
+        'preco': '',
+        'preco_original': '',
+        'descricao': '',
+        'categoria': '',
+        'url_final': '',
+        'plataforma': plataforma,
+    }
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-blink-features=AutomationControlled']
+        )
+        context = await browser.new_context(
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            viewport={'width': 1366, 'height': 768}
+        )
+        page = await context.new_page()
+
+        try:
+            resp = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            if resp and resp.status >= 400:
+                raise Exception(f"HTTP {resp.status}")
+
+            await page.wait_for_timeout(2000)
+            dados['url_final'] = page.url
+
+            # Extração genérica usando meta tags
+            result = await page.evaluate('''() => {
+                const getMeta = (name) => {
+                    const el = document.querySelector(`meta[property="${name}"], meta[name="${name}"]`);
+                    return el ? el.getAttribute('content') : '';
+                };
+
+                return {
+                    titulo: getMeta('og:title') || document.title || '',
+                    imagem: getMeta('og:image') || '',
+                    preco: getMeta('product:price:amount') || getMeta('og:price') || '',
+                    descricao: getMeta('og:description') || '',
+                };
+            }''')
+
+            # Mapear resultados
+            if result.get('titulo'):
+                dados['titulo'] = result.get('titulo', '').strip()[:200]
+            if result.get('imagem'):
+                dados['imagem_url'] = result.get('imagem', '').strip()
+            if result.get('preco'):
+                dados['preco'] = result.get('preco', '').strip()
+            if result.get('descricao'):
+                dados['descricao'] = result.get('descricao', '').strip()[:1000]
+
+            logger.info(f"✅ Extração genérica ({plataforma}): {dados['titulo'][:60] if dados['titulo'] else 'SEM TÍTULO'}")
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao extrair genérico de {plataforma}: {e}")
+            raise
+        finally:
+            await browser.close()
+
+    return dados
+
+
+def _detectar_plataforma_e_extrair(url: str) -> dict:
+    """
+    Detecta a plataforma pela URL e chama o scraper apropriado.
+    Retorna dict com dados incluindo 'plataforma'.
+    """
+    plataforma_detectada = DetectorPlataforma.detectar(url)
+    logger.info(f"🔍 Plataforma detectada: {plataforma_detectada} para URL: {url[:60]}")
+    
+    # Usar scraper especializado conforme plataforma
+    if plataforma_detectada == 'mercado_livre':
+        return asyncio.run(_extrair_dados_ml(url))
+    elif plataforma_detectada == 'amazon':
+        return asyncio.run(_extrair_dados_amazon(url))
+    else:
+        # Usar extração genérica para outras plataformas
+        return asyncio.run(_extrair_dados_genererico(url, plataforma_detectada))
+
+
 def extrair_dados_produto(url: str) -> dict:
-    """Wrapper síncrono para a função assíncrona de extração.
+    """Wrapper síncrono que detecta plataforma e extrai dados.
     
     Funciona em threads do Django (sem event loop) e em contextos com loop já rodando.
     Compatível com SQLite (dev com admin) e MySQL (produção com workers).
     """
     try:
-        # Abordagem 1: Tentar asyncio.run() diretamente (mais robusto)
-        # Funciona na maioria dos casos: threads de worker, novas threads, etc
+        # Tentar detecção e extração
+        dados = _detectar_plataforma_e_extrair(url)
+        if dados:
+            return dados
+        
+        # Fallback para ML se não conseguir detectar
         return asyncio.run(_extrair_dados_ml(url))
     except RuntimeError as e:
-        # Se falhar, pode ser porque há um loop já rodando
-        # Nesse caso, precisa de uma thread nova
+        # Se falhar por event loop, usar ThreadPoolExecutor
         if 'asyncio.run() cannot be called from a running event loop' in str(e):
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _extrair_dados_ml(url))
-                return future.result(timeout=60)
+                future = pool.submit(_detectar_plataforma_e_extrair, url)
+                resultado = future.result(timeout=60)
+                return resultado if resultado else asyncio.run(_extrair_dados_ml(url))
         else:
-            # Algum outro erro RuntimeError - relancar
             raise
 
 
@@ -594,6 +854,12 @@ def processar_produto_automatico(produto):
 
     try:
         logger.info(f"🔄 Iniciando processamento do link: {produto.link_afiliado}")
+        
+        # Detectar plataforma
+        plataforma_detectada = DetectorPlataforma.detectar(produto.link_afiliado)
+        produto.plataforma = plataforma_detectada
+        logger.info(f"🔍 Plataforma detectada: {dict(produto._meta.get_field('plataforma').choices).get(plataforma_detectada, plataforma_detectada)}")
+        
         dados = extrair_dados_produto(produto.link_afiliado)
 
         # Detectar se o ML redirecionou para uma página diferente
@@ -687,6 +953,7 @@ def processar_produto_automatico(produto):
         produto.preco_original = dados.get('preco_original', '') or produto.preco_original
         produto.descricao = dados.get('descricao', '') or produto.descricao
         produto.url_final = dados.get('url_final', '') or produto.url_final
+        # Plataforma já foi definida no início
         
         if categoria_obj:
             produto.categoria = categoria_obj

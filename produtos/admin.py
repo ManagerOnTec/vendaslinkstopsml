@@ -96,16 +96,16 @@ class AnuncioAdmin(admin.ModelAdmin):
 @admin.register(ProdutoAutomatico)
 class ProdutoAutomaticoAdmin(admin.ModelAdmin):
     list_display = (
-        'titulo_display', 'preview_imagem', 'preco', 'status_badge',
+        'titulo_display', 'plataforma_badge', 'preview_imagem', 'preco', 'status_badge',
         'falhas_consecutivas', 'categoria', 'destaque', 'ativo', 'ordem', 'criado_em'
     )
-    list_filter = ('status_extracao', 'ativo', 'destaque', 'categoria', 'falhas_consecutivas')
+    list_filter = ('plataforma', 'status_extracao', 'ativo', 'destaque', 'categoria', 'falhas_consecutivas')
     search_fields = ('titulo', 'link_afiliado')
     list_editable = ('destaque', 'ativo', 'ordem')
     list_per_page = 25
     ordering = ('-destaque', 'ordem', '-criado_em')
     readonly_fields = (
-        'titulo', 'imagem_url', 'preco', 'preco_original', 'descricao',
+        'plataforma', 'titulo', 'imagem_url', 'preco', 'preco_original', 'descricao',
         'url_final', 'status_extracao', 'erro_extracao',
         'preview_imagem_grande', 'criado_em', 'atualizado_em', 'ultima_extracao',
         'falhas_consecutivas', 'motivo_desativacao'
@@ -114,11 +114,11 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Link do Produto (COLE AQUI)', {
-            'fields': ('link_afiliado',),
+            'fields': ('link_afiliado', 'plataforma'),
             'description': (
                 '<strong style="font-size:14px;color:#1a73e8;">'
-                'Cole o link do produto do Mercado Livre e salve. '
-                'Os dados serão extraídos automaticamente!</strong>'
+                'Cole o link do produto (Mercado Livre, Amazon, Shopee, Shein). '
+                'Os dados serão extraídos automaticamente! A plataforma é detectada pelo sistema.</strong>'
             )
         }),
         ('Dados Extraídos Automaticamente', {
@@ -172,6 +172,34 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
             )
         return 'Nenhuma imagem extraída ainda'
     preview_imagem_grande.short_description = 'Preview da Imagem'
+
+    def plataforma_badge(self, obj):
+        """Exibe a plataforma com ícone e cor."""
+        cores = {
+            'mercado_livre': '#FFB100',
+            'amazon': '#FF9900',
+            'shopee': '#EE4D2D',
+            'shein': '#010101',
+            'outro': '#999999',
+        }
+        icones = {
+            'mercado_livre': '🟨 ',
+            'amazon': '🟧 ',
+            'shopee': '🔴 ',
+            'shein': '⬛ ',
+            'outro': '❓ ',
+        }
+        color = cores.get(obj.plataforma, '#999')
+        icone = icones.get(obj.plataforma, '')
+        label = obj.get_plataforma_display() if obj.plataforma else 'Não detectada'
+        
+        return format_html(
+            '<span style="background:{};color:white;padding:5px 10px;'
+            'border-radius:8px;font-size:12px;font-weight:bold;display:inline-block;">'
+            '{}{}</span>',
+            color, icone, label
+        )
+    plataforma_badge.short_description = 'Plataforma'
 
     def status_badge(self, obj):
         colors = {
