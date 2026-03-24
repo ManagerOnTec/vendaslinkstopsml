@@ -3,7 +3,7 @@ from django.utils.html import format_html
 from django.contrib import messages
 from .models import (
     Produto, Categoria, Anuncio, ProdutoAutomatico,
-    AgendamentoAtualizacao, LogAtualizacao, DocumentoLegal
+    AgendamentoAtualizacao, LogAtualizacao, DocumentoLegal, EscalonamentoConfig
 )
 
 
@@ -553,3 +553,179 @@ class DocumentoLegalAdmin(admin.ModelAdmin):
 admin.site.site_header = 'Vendas Links Tops ML - Administração'
 admin.site.site_title = 'Vendas Links Tops ML'
 admin.site.index_title = 'Painel de Controle'
+
+
+# ============================================================
+# CONFIGURAÇÃO DE ESCALONAMENTO (Singleton)
+# ============================================================
+
+@admin.register(EscalonamentoConfig)
+class EscalonamentoConfigAdmin(admin.ModelAdmin):
+    """
+    Admin para configurações de escalonamento.
+    SINGLETON: Existe apenas 1 registro (pk=1).
+    
+    Permite ajustar LIMITE_FALHAS, NUM_WORKERS, timeouts e outros
+    parâmetros em runtime, sem necessidade de redeploy.
+    """
+
+    # Campos readonly (não editáveis)
+    readonly_fields = ('atualizado_em', 'config_summary')
+
+    # Fieldsets organizados por seção
+    fieldsets = (
+        ('🎯 LIMITE DE FALHAS E RETRY BACKOFF', {
+            'description': (
+                '<strong style="font-size:13px;color:#2196f3;">Controla como o sistema '
+                'lida com produtos que falham durante a extração.</strong><br><br>'
+                '✅ <strong>Aumente limite_falhas</strong> para reduzir falsos positivos '
+                '(ex: timeout ocasional)<br>'
+                '✅ <strong>Aumente retry_delays</strong> para evitar rate limiting<br>'
+                '⚠️ <strong>Diminua</strong ambos para desativar rápido produtos problemáticos. '
+                '<br><br>'
+                '<code style="background:#f5f5f5;padding:3px 6px;">Ex: 3 falhas cada 5min, '
+                '15min, 1h, 4h = 5 tentativas totais com backoff exponencial</code>'
+            ),
+            'fields': (
+                'limite_falhas',
+                'retry_delay_1_minutos',
+                'retry_delay_2_minutos',
+                'retry_delay_3_minutos',
+                'retry_delay_4_minutos',
+            ),
+        }),
+        ('⚙️ PROCESSAMENTO E WORKERS', {
+            'description': (
+                '<strong style="font-size:13px;color:#2196f3;">Controla paralelismo e fila.</strong><br><br>'
+                '🔧 <strong>num_workers</strong>: Threads paralelas. Dev=2, Staging=4, Prod=8+<br>'
+                '🔧 <strong>max_queue_size</strong>: Máximo de tarefas pendentes<br>'
+                '🔧 <strong>task_timeout_segundos</strong>: Timeout por tarefa (reduzir se der timeout frequente)'
+            ),
+            'fields': (
+                'num_workers',
+                'max_queue_size',
+                'task_timeout_segundos',
+            ),
+        }),
+        ('🌐 PLAYWRIGHT (Web Scraping)', {
+            'description': (
+                '<strong style="font-size:13px;color:#2196f3;">Timeout e delays para extrair dados de páginas web.</strong><br><br>'
+                '⏱️ <strong>playwright_timeout_ms</strong>: Tempo máximo para carregar página (30s é padrão)<br>'
+                '⏱️ <strong>playwright_delay_ms</strong>: Esperar após carregar (para JavaScript render)'
+            ),
+            'fields': (
+                'playwright_timeout_ms',
+                'playwright_delay_ms',
+            ),
+        }),
+        ('🚦 RATE LIMITING', {
+            'description': (
+                '<strong style="font-size:13px;color:#2196f3;">Protege contra banimento das plataformas.</strong><br><br>'
+                'Aumentar delays se tomar muitos 429 (Too Many Requests). '
+                'Reduzir para ir mais rápido se estabilizar.'
+            ),
+            'fields': (
+                'rate_limit_delay_ms',
+                'max_concurrent_requests',
+            ),
+        }),
+        ('💾 DATABASE', {
+            'description': (
+                '<strong style="font-size:13px;color:#2196f3;">Configurações de banco de dados.</strong><br><br>'
+                '⚠️ <strong>use_sqlite</strong>: APENAS para dev local. '
+                'Produção com 1000+ itens: <strong>SEMPRE MySQL/PostgreSQL</strong><br>'
+                'ℹ️ Em production, settings.py carrega esse valor via env var.'
+            ),
+            'fields': (
+                'use_sqlite',
+                'sqlite_timeout_segundos',
+            ),
+        }),
+        ('📋 LOGGING', {
+            'description': (
+                '<strong style="font-size:13px;color:#2196f3;">Verbosidade de logs.</strong><br><br>'
+                '🐛 DEBUG: Muitos detalhes (dev local)<br>'
+                'ℹ️ INFO: Informações principais (recomendado prod)<br>'
+                '⚠️ WARNING: Apenas alertas<br>'
+                '❌ ERROR: Apenas erros'
+            ),
+            'fields': (
+                'log_level',
+                'logs_retention_dias',
+            ),
+        }),
+        ('📝 NOTAS E HISTÓRICO', {
+            'classes': ('wide',),
+            'description': (
+                '<strong style="font-size:13px;color:#2196f3;">Documenterenomudanças.</strong><br>'
+                'Ex: "Aumentado retry_delay_1 de 5 para 10 → muitos timeouts na Shopee 2026-03-20"'
+            ),
+            'fields': (
+                'nota',
+                'atualizado_em',
+                'config_summary',
+            ),
+        }),
+    )
+
+    def config_summary(self, obj):
+        """Exibe um resumo da configuração atual."""
+        from .config_escalonamento import get_config_info
+        config_text = get_config_info()  # Será criada função helper
+        return format_html(
+            '<pre style="background:#f5f5f5;padding:12px;border-radius:5px;'
+            'font-size:11px;line-height:1.6;max-height:300px;overflow-y:auto;"'
+            'font-family:monospace;">{}</pre>',
+            config_text
+        )
+    config_summary.short_description = '📊 Resumo da Configuração Atual'
+
+    def has_add_permission(self, request):
+        """Impede criar novos registros (singleton)"""
+        # Permitir add apenas se não existir nenhum registro
+        from .models import EscalonamentoConfig
+        return not EscalonamentoConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        """Impede deletar configuração"""
+        return False
+
+    def save_model(self, request, obj, form, change):
+        """Força sempre salvar com pk=1 (singleton)"""
+        obj.pk = 1
+        super().save_model(request, obj, form, change)
+        
+        # Mostrar mensagem confirmando salva
+        from django.contrib import messages
+        messages.success(
+            request,
+            '✅ Configuração de escalonamento atualizada com sucesso! '
+            'As mudanças entram em efeito no próximo ciclo de processamento.'
+        )
+
+    def get_urls(self):
+        """Adiciona URL para ir direto à configuração (singleton)"""
+        from django.urls import path
+        from django.views.decorators.http import require_http_methods
+        
+        urls = super().get_urls()
+        
+        # No list view, redirecionar para edit do único registro
+        custom_urls = [
+            path(
+                '',
+                require_http_methods(['GET'])(self.admin_site.admin_view(self.singleton_redirect)),
+                name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_changelist',
+            ),
+        ]
+        
+        return custom_urls + urls
+    
+    def singleton_redirect(self, request):
+        """Redireciona list view → edit da config única"""
+        from django.shortcuts import redirect
+        from .models import EscalonamentoConfig
+        
+        config = EscalonamentoConfig.obter_config()
+        return redirect(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change', config.pk)
+

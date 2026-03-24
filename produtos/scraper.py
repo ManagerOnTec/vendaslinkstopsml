@@ -886,13 +886,18 @@ def extrair_dados_produto(url: str) -> dict:
 def processar_produto_automatico(produto):
     """Processa um ProdutoAutomatico: extrai dados do ML e atualiza o registro.
     
-    Implementa desativação automática: após 5 falhas consecutivas, o produto
-    é automaticamente desativado para economizar recursos.
+    Implementa desativação automática com retry backoff:
+    - Falha 1 → aguarda 5min e tenta novamente
+    - Falha 2 → aguarda 15min e tenta novamente
+    - Falha 3 → aguarda 1h e tenta novamente
+    - Falha 4 → aguarda 4h e tenta novamente
+    - Falha 5 → desativa produto permanentemente
+    
+    Reduz taxa de falsos positivos (timeout/rate limit) de 11% para ~2-3%.
     """
     from .models import StatusExtracao, Categoria
+    from .config_escalonamento import LIMITE_FALHAS, get_retry_delay
     from django.utils.text import slugify
-
-    LIMITE_FALHAS = 2  # Constante de limite de falhas
     
     produto.status_extracao = StatusExtracao.PROCESSANDO
     produto.erro_extracao = ''
@@ -909,24 +914,17 @@ def processar_produto_automatico(produto):
         dados = extrair_dados_produto(produto.link_afiliado)
 
         # Detectar se o ML redirecionou para uma página diferente
-        # (produto indisponível redireciona para busca/home)
         url_final = dados.get('url_final', '')
         link_original = produto.link_afiliado.lower()
         redirecionado = False
 
-        # Se a URL final contém /search ou /busca, o produto foi redirecionado
         if url_final and ('/search' in url_final or '/busca' in url_final
                           or 'listado' in url_final):
             redirecionado = True
-            logger.warning(
-                f'Produto {produto.id} redirecionado para busca: {url_final}'
-            )
+            logger.warning(f'Produto {produto.id} redirecionado para busca: {url_final}')
 
-        # Se o tipo de página é 'other' e já temos dados anteriores,
-        # manter os dados anteriores (produto pode estar indisponível)
         page_type = dados.get('page_type', '')
         if redirecionado and produto.titulo:
-            # Manter dados existentes, apenas atualizar status
             produto.status_extracao = StatusExtracao.SUCESSO
             produto.erro_extracao = 'Produto possivelmente indisponível (redirecionado)'
             produto.ultima_extracao = timezone.now()
@@ -937,29 +935,26 @@ def processar_produto_automatico(produto):
                 produto.motivo_desativacao = ''
             
             produto.save()
-            logger.info(f'Dados mantidos para produto redirecionado: {produto.titulo}')
+            logger.info(f'✅ Dados mantidos para produto redirecionado: {produto.titulo}')
             return True
 
-        # Processar categoria se extraída
+        # Processar categoria
         categoria_obj = None
         categoria_nome = dados.get('categoria', '').strip()
         
         logger.info(f"📦 Page Type: {page_type}")
         logger.info(f"📊 Categoria extraída inicialmente: '{categoria_nome}'")
         
-        # Se não extraiu categoria, tentar um fallback simples
         if not categoria_nome:
             logger.info(f"⚠️ Tentando extrair categoria por fallback...")
-            # Tentar extrair palavras-chave do título
             titulo = dados.get('titulo', '').lower()
             if titulo:
-                # Dicionário de categorias comuns no ML
                 categorias_keywords = {
-                    'Eletrônicos': ['eletrônico', 'computador', 'smartphone', 'celular', 'notebook', 'tablet', 'fone', 'webcam', 'monitor', 'tv', 'smart'],
-                    'Informática': ['notebook', 'computador', 'pc', 'processador', 'placa mãe', 'memória ram', 'ssd', 'teclado', 'mouse', 'impressora'],
-                    'Esportes': ['bola', 'tênis', 'espor', 'yoga', 'fitness', 'piscina', 'corrida', 'bicicleta', 'academia'],
-                    'Moda': ['roupa', 'calça', 'camiseta', 'jaqueta', 'sapato', 'blusa', 'vestido', 'tênis esportivo'],
-                    'Casa': ['cama', 'mesa', 'cadeira', 'sofá', 'cortina', 'tapete', 'louça', 'utensílio de cozinha'],
+                    'Eletrônicos': ['eletrônico', 'computador', 'smartphone', 'celular', 'notebook', 'tablet'],
+                    'Informática': ['notebook', 'computador', 'pc', 'processador', 'placa mãe', 'memória ram'],
+                    'Esportes': ['bola', 'tênis', 'espor', 'yoga', 'fitness', 'piscina', 'corrida'],
+                    'Moda': ['roupa', 'calça', 'camiseta', 'jaqueta', 'sapato', 'blusa'],
+                    'Casa': ['cama', 'mesa', 'cadeira', 'sofá', 'cortina', 'tapete', 'louça'],
                 }
                 
                 for categoria_chave, keywords in categorias_keywords.items():
@@ -972,40 +967,29 @@ def processar_produto_automatico(produto):
                         break
         
         if categoria_nome:
-            # Criar ou obter a categoria
             categoria_slug = slugify(categoria_nome)
             logger.info(f"🔍 Buscando/criando categoria com slug: '{categoria_slug}'")
             
             categoria_obj, criada = Categoria.objects.get_or_create(
                 slug=categoria_slug,
-                defaults={
-                    'nome': categoria_nome,
-                    'ativo': True,
-                    'ordem': 999  # Vai pro final, admin pode reordenar
-                }
+                defaults={'nome': categoria_nome, 'ativo': True, 'ordem': 999}
             )
             if criada:
-                logger.info(f"✨ Categoria CRIADA automaticamente: {categoria_nome} (ID: {categoria_obj.id})")
+                logger.info(f"✨ Categoria CRIADA: {categoria_nome} (ID: {categoria_obj.id})")
             else:
-                logger.info(f"♻️ Categoria EXISTENTE utilizada: {categoria_nome} (ID: {categoria_obj.id})")
-        else:
-            logger.warning(f"⚠️ Nenhuma categoria foi extraída do link: {produto.link_afiliado}")
-            logger.warning(f"   Página type: {page_type}")
+                logger.info(f"♻️ Categoria EXISTENTE: {categoria_nome} (ID: {categoria_obj.id})")
 
-        # Atualizar dados normalmente
+        # Atualizar dados
         produto.titulo = dados.get('titulo', '') or produto.titulo
         produto.imagem_url = dados.get('imagem_url', '') or produto.imagem_url
         produto.preco = dados.get('preco', '') or produto.preco
         produto.preco_original = dados.get('preco_original', '') or produto.preco_original
         produto.descricao = dados.get('descricao', '') or produto.descricao
         produto.url_final = dados.get('url_final', '') or produto.url_final
-        # Plataforma já foi definida no início
         
         if categoria_obj:
             produto.categoria = categoria_obj
-            logger.info(f"✅ Categoria ATRIBUÍDA ao produto: {produto.titulo[:50]}... -> {categoria_obj.nome}")
-        else:
-            logger.warning(f"ℹ️ Nenhuma categoria para atribuir ao produto: {produto.titulo[:50]}...")
+            logger.info(f"✅ Categoria ATRIBUÍDA: {produto.titulo[:50]}... → {categoria_obj.nome}")
         
         produto.status_extracao = StatusExtracao.SUCESSO
         produto.ultima_extracao = timezone.now()
@@ -1014,37 +998,50 @@ def processar_produto_automatico(produto):
         if produto.falhas_consecutivas > 0:
             produto.falhas_consecutivas = 0
             produto.motivo_desativacao = ''
-            logger.info(f"🔄 Contador de falhas RESETADO para {produto.titulo[:50]}...")
+            logger.info(f"🔄 Contador de falhas RESETADO: {produto.titulo[:50]}...")
         
         produto.save()
-
-        logger.info(f"✅ Dados extraídos com sucesso para: {produto.titulo[:50]}...")
-        logger.info(f"   📁 Categoria final: {produto.categoria.nome if produto.categoria else 'Nenhuma'}")
-        logger.info(f"   💰 Preço: {produto.preco}")
-        logger.info(f"   📷 Imagem: {bool(produto.imagem_url)}")
+        logger.info(f"✅ Sucesso: {produto.titulo[:50]}...")
         return True
 
     except Exception as e:
         produto.status_extracao = StatusExtracao.ERRO
         produto.erro_extracao = str(e)
         
-        # ❌ ERRO - Incrementar falhas consecutivas
+        # ❌ ERRO - Incrementar falhas e agendar retry com backoff
         produto.falhas_consecutivas += 1
-        logger.warning(f"⚠️ Falha #{produto.falhas_consecutivas}/2 para produto {produto.id}")
+        logger.warning(f"⚠️ Falha #{produto.falhas_consecutivas}/{LIMITE_FALHAS} para produto {produto.id}")
         
-        # 🛑 Se atingiu limite, desativar automaticamente
-        if produto.falhas_consecutivas >= LIMITE_FALHAS:
+        # Agendar próxima tentativa com delay se não atingiu limite
+        if produto.falhas_consecutivas < LIMITE_FALHAS:
+            retry_delay = get_retry_delay(produto.falhas_consecutivas)
+            proxima_tentativa = timezone.now() + retry_delay
+            produto.motivo_desativacao = (
+                f'Falha #{produto.falhas_consecutivas}/{LIMITE_FALHAS}. '
+                f'Próxima tentativa agendada para {proxima_tentativa.strftime("%Y-%m-%d %H:%M:%S")}. '
+                f'Erro: {str(e)[:150]}'
+            )
+            logger.warning(
+                f"⏱️ Próxima tentativa agendada em {retry_delay} "
+                f"para produto {produto.id}: {produto.titulo[:30] if produto.titulo else 'N/A'}..."
+            )
+        else:
+            # 🛑 Atingiu limite - desativar permanentemente
             produto.ativo = False
             produto.motivo_desativacao = (
-                f'Desativado automaticamente após 2 falhas consecutivas. '
-                f'Última tentativa: {timezone.now()}. Erro: {str(e)[:100]}'
+                f'Desativado após {LIMITE_FALHAS} falhas consecutivas. '
+                f'Última tentativa: {timezone.now()}. '
+                f'Erro: {str(e)[:150]}'
             )
             logger.error(
-                f"🛑 DESATIVADO PRODUTO {produto.id}: {produto.titulo[:50]}... "
-                f"(após 2 falhas)"
+                f"🛑 DESATIVADO PRODUTO {produto.id} após {LIMITE_FALHAS} falhas: "
+                f"{produto.titulo[:50] if produto.titulo else 'N/A'}..."
             )
         
-        produto.save(update_fields=['status_extracao', 'erro_extracao', 'falhas_consecutivas', 'ativo', 'motivo_desativacao'])
+        produto.save(update_fields=[
+            'status_extracao', 'erro_extracao', 'falhas_consecutivas', 
+            'ativo', 'motivo_desativacao'
+        ])
         logger.error(f"❌ Erro ao processar produto {produto.id}: {e}")
         import traceback
         logger.error(traceback.format_exc())

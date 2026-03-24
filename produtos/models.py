@@ -225,7 +225,8 @@ class ProdutoAutomatico(models.Model):
         max_length=20,
         choices=StatusExtracao.choices,
         default=StatusExtracao.PENDENTE,
-        verbose_name="Status da Extração"
+        verbose_name="Status da Extração",
+        db_index=True  # ← ÍNDICE ADICIONADO
     )
     erro_extracao = models.TextField(
         blank=True,
@@ -246,7 +247,8 @@ class ProdutoAutomatico(models.Model):
     )
     ativo = models.BooleanField(
         default=True,
-        verbose_name="Ativo"
+        verbose_name="Ativo",
+        db_index=True  # ← ÍNDICE ADICIONADO
     )
     ordem = models.IntegerField(
         default=0,
@@ -257,23 +259,31 @@ class ProdutoAutomatico(models.Model):
     ultima_extracao = models.DateTimeField(
         null=True,
         blank=True,
-        verbose_name="Última Extração"
+        verbose_name="Última Extração",
+        db_index=True  # ← ÍNDICE ADICIONADO
     )
     falhas_consecutivas = models.IntegerField(
         default=0,
         verbose_name="Falhas Consecutivas",
-        help_text="Número de tentativas de atualização que falharam. Ao atingir limite, produto é desativado automaticamente."
+        help_text="Número de tentativas de atualização que falharam. Ao atingir limite, produto é desativado automaticamente.",
+        db_index=True  # ← ÍNDICE ADICIONADO
     )
     motivo_desativacao = models.TextField(
         blank=True,
         verbose_name="Motivo da Desativação",
-        help_text="Registra o motivo automático de desativação (ex: 2 falhas consecutivas)"
+        help_text="Registra o motivo automático de desativação (ex: falhas consecutivas)"
     )
 
     class Meta:
         verbose_name = "Produto Automático"
         verbose_name_plural = "Produtos Automáticos"
         ordering = ['-destaque', 'ordem', '-criado_em']
+        indexes = [
+            models.Index(fields=['ativo', 'status_extracao'], name='idx_ativo_status'),
+            models.Index(fields=['-ultima_extracao', 'ativo'], name='idx_ultima_ext_ativo'),
+            models.Index(fields=['falhas_consecutivas', 'ativo'], name='idx_falhas_ativo'),
+            models.Index(fields=['plataforma', 'ativo'], name='idx_plataforma_ativo'),
+        ]
 
     def get_imagem(self):
         """Retorna a URL da imagem extraída."""
@@ -417,3 +427,164 @@ class DocumentoLegal(models.Model):
 
     def __str__(self):
         return self.get_tipo_display()
+
+
+class EscalonamentoConfig(models.Model):
+    """
+    Configurações de escalonamento e processamento da fila de produtos.
+    Modelo singleton - deve existir apenas 1 registro.
+    Editável via Django admin, sem necessidade de redeploy.
+    """
+
+    # ===== LIMITE DE FALHAS E RETRY BACKOFF =====
+    limite_falhas = models.IntegerField(
+        default=5,
+        verbose_name="Limite de Falhas Consecutivas",
+        help_text="Quantas vezes tentar antes de desativar produto (recomendado: 5). Aumento reduz falsos positivos."
+    )
+
+    retry_delay_1_minutos = models.IntegerField(
+        default=5,
+        verbose_name="1ª Tentativa (minutos)",
+        help_text="Esperar X minutos antes de 1ª retry (recomendado: 5)"
+    )
+
+    retry_delay_2_minutos = models.IntegerField(
+        default=15,
+        verbose_name="2ª Tentativa (minutos)",
+        help_text="Esperar X minutos antes de 2ª retry (recomendado: 15)"
+    )
+
+    retry_delay_3_minutos = models.IntegerField(
+        default=60,
+        verbose_name="3ª Tentativa (minutos)",
+        help_text="Esperar X minutos antes de 3ª retry (recomendado: 60 = 1h)"
+    )
+
+    retry_delay_4_minutos = models.IntegerField(
+        default=240,
+        verbose_name="4ª Tentativa (minutos)",
+        help_text="Esperar X minutos antes de 4ª retry (recomendado: 240 = 4h)"
+    )
+
+    # ===== WORKERS E FILA =====
+    num_workers = models.IntegerField(
+        default=2,
+        verbose_name="Número de Workers",
+        help_text="Threads paralelas: dev=2, staging=4, produção=8. Aumentar melhora throughput."
+    )
+
+    max_queue_size = models.IntegerField(
+        default=5000,
+        verbose_name="Tamanho Máximo da Fila",
+        help_text="Máximo de tarefas na fila (recomendado: 5000)"
+    )
+
+    task_timeout_segundos = models.IntegerField(
+        default=120,
+        verbose_name="Timeout por Tarefa (segundos)",
+        help_text="Tempo máximo para processar 1 produto (recomendado: 120)"
+    )
+
+    # ===== PLAYWRIGHT =====
+    playwright_timeout_ms = models.IntegerField(
+        default=30000,
+        verbose_name="Playlist Timeout (ms)",
+        help_text="Timeout para carregar página web (recomendado: 30000 = 30s)"
+    )
+
+    playwright_delay_ms = models.IntegerField(
+        default=3000,
+        verbose_name="Delay entre Requests (ms)",
+        help_text="Esperar após abrir página (recomendado: 3000 = 3s)"
+    )
+
+    # ===== RATE LIMITING =====
+    rate_limit_delay_ms = models.IntegerField(
+        default=300,
+        verbose_name="Rate Limit Delay (ms)",
+        help_text="Esperar entre requisições (recomendado: 300ms)"
+    )
+
+    max_concurrent_requests = models.IntegerField(
+        default=2,
+        verbose_name="Max Requisições Paralelas",
+        help_text="Quantas req simultâneas por worker (recomendado: 2)"
+    )
+
+    # ===== DATABASE =====
+    use_sqlite = models.BooleanField(
+        default=False,
+        verbose_name="Usar SQLite (Dev Local)",
+        help_text="Só para dev local. Produção: sempre MySQL/PostgreSQL"
+    )
+
+    sqlite_timeout_segundos = models.IntegerField(
+        default=60,
+        verbose_name="SQLite Timeout (segundos)",
+        help_text="Timeout para operações SQLite (recomendado: 60)"
+    )
+
+    # ===== LOGGING =====
+    log_level = models.CharField(
+        max_length=20,
+        choices=[
+            ('DEBUG', 'Debug - Muitos detalhes'),
+            ('INFO', 'Info - Informações principais'),
+            ('WARNING', 'Warning - Apenas alertas'),
+            ('ERROR', 'Error - Apenas erros'),
+        ],
+        default='INFO',
+        verbose_name="Nível de Log",
+        help_text="Controla verbosidade dos logs (dev=DEBUG, prod=INFO)"
+    )
+
+    logs_retention_dias = models.IntegerField(
+        default=30,
+        verbose_name="Retenção de Logs (dias)",
+        help_text="Deletar logs com mais de X dias (recomendado: 30)"
+    )
+
+    # ===== METADATA =====
+    atualizado_em = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Última atualização"
+    )
+
+    nota = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Notas / Changelog",
+        help_text="Documenterenomudanças realizadas (ex: 'Aumentado retry_delay_1 de 5 para 10 -> muitos timeouts')"
+    )
+
+    class Meta:
+        verbose_name = "Configuração de Escalonamento"
+        verbose_name_plural = "Configuração de Escalonamento (Singleton)"
+
+    def __str__(self):
+        return f"EscalonamentoConfig (atualizado: {self.atualizado_em.strftime('%d/%m %H:%M')})"
+
+    @classmethod
+    def obter_config(cls):
+        """
+        Retorna a única instância da config. Cria com defaults se não existir.
+        Uso: config = EscalonamentoConfig.obter_config()
+        """
+        config, created = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                'limite_falhas': 5,
+                'num_workers': 2,
+            }
+        )
+        return config
+
+    def save(self, *args, **kwargs):
+        """Garante que existe apenas 1 registro (singleton)"""
+        self.pk = 1  # Always use pk=1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Impede deletar a configuração"""
+        raise ValueError("❌ Não é possível deletar EscalonamentoConfig. Editar ao invés disso.")
