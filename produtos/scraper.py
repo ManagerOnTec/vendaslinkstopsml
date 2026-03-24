@@ -11,10 +11,47 @@ Suporta:
 import asyncio
 import logging
 import re
+import threading
+import time
 from django.utils import timezone
 from .detector_plataforma import DetectorPlataforma, SELETORES, limpar_preco
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# RATE LIMITING PARA MÚLTIPLAS PLATAFORMAS
+# ============================================================================
+# Evita sobrecarga do servidor ao fazer múltiplas requisições simultâneas
+
+_scraper_semaphore = None  # Será inicializado conforme necessário
+_last_request_time = None
+_rate_limit_lock = threading.Lock()
+
+MIN_DELAY_BETWEEN_REQUESTS_MS = 300  # Mínimo delay entre requisições (300ms)
+
+
+def _get_semaphore():
+    """Retorna semáforo com limite de 2 requisições simultâneas."""
+    global _scraper_semaphore
+    if _scraper_semaphore is None:
+        _scraper_semaphore = asyncio.Semaphore(2)  # Máx 2 requisições em paralelo
+    return _scraper_semaphore
+
+
+def _enforce_rate_limit():
+    """Garante delay mínimo entre requisições."""
+    global _last_request_time
+    
+    with _rate_limit_lock:
+        current_time = time.time()
+        if _last_request_time:
+            elapsed = (current_time - _last_request_time) * 1000  # Converter para ms
+            if elapsed < MIN_DELAY_BETWEEN_REQUESTS_MS:
+                sleep_time = (MIN_DELAY_BETWEEN_REQUESTS_MS - elapsed) / 1000
+                logger.debug(f"⏱️ Rate limiting: aguardando {sleep_time:.2f}s")
+                time.sleep(sleep_time)
+        _last_request_time = time.time()
+
 
 
 def _melhorar_url_imagem(url: str) -> str:
@@ -37,6 +74,9 @@ def _melhorar_url_imagem(url: str) -> str:
 
 async def _extrair_dados_ml(url: str) -> dict:
     """Extrai dados de um produto do Mercado Livre usando Playwright."""
+    # Aplicar rate limiting antes de iniciar requisição
+    _enforce_rate_limit()
+    
     from playwright.async_api import async_playwright
 
     dados = {
@@ -561,6 +601,9 @@ async def _extrair_dados_amazon(url: str) -> dict:
     Scraper especializado para produtos Amazon.
     Extrai: título, preço, imagem, descrição com seletores específicos.
     """
+    # Aplicar rate limiting antes de iniciar requisição
+    _enforce_rate_limit()
+    
     from playwright.async_api import async_playwright
 
     dados = {
@@ -725,6 +768,9 @@ async def _extrair_dados_genererico(url: str, plataforma: str) -> dict:
     Extração genérica usando meta tags.
     Fallback para plataformas que ainda não têm scraper especializado (Shopee, Shein, etc).
     """
+    # Aplicar rate limiting antes de iniciar requisição
+    _enforce_rate_limit()
+    
     from playwright.async_api import async_playwright
 
     dados = {

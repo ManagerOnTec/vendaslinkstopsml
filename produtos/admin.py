@@ -265,34 +265,66 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
                         f'Motivo: {obj.motivo_desativacao[:80]}...'
                     )
 
-    @admin.action(description='Extrair/Atualizar dados do Mercado Livre')
+    @admin.action(description='Extrair/Atualizar dados (Genérico - todas as plataformas)')
     def extrair_dados_action(self, request, queryset):
+        """
+        Extrai dados de todos os produtos selecionados (ML, Amazon, Shopee, Shein, etc).
+        Processamento assíncrono para evitar bloqueios com múltiplas plataformas.
+        """
         from .scraper import processar_produto_automatico
-        sucesso = 0
-        erros = 0
-        for produto in queryset:
-            if processar_produto_automatico(produto):
-                sucesso += 1
-            else:
-                erros += 1
+        from .task_queue import queue_batch_tasks
+        
+        count = queryset.count()
+        
+        if count == 0:
+            messages.warning(request, 'Nenhum produto selecionado.')
+            return
+        
+        # Adicionar tarefas à fila para processamento assíncrono
+        queue_batch_tasks(processar_produto_automatico, list(queryset))
+        
         messages.success(
             request,
-            f'Extração concluída: {sucesso} sucesso(s), {erros} erro(s).'
+            f'✅ {count} produto(s) enfileirado(s) para extração. '
+            f'Processamento acontecendo em background (multi-plataforma: ML, Amazon, Shopee, Shein)...'
         )
 
-    @admin.action(description='Re-extrair dados (forçar atualização)')
+    @admin.action(description='Re-extrair dados (forçar atualização - todas as plataformas)')
     def reextrair_dados_action(self, request, queryset):
-        self.extrair_dados_action(request, queryset)
+        """
+        Força re-extração de dados, resetando status para PROCESSANDO.
+        """
+        from .models import StatusExtracao
+        from .task_queue import queue_batch_tasks
+        from .scraper import processar_produto_automatico
+        
+        # Resetar status para forçar re-extração
+        queryset.update(status_extracao=StatusExtracao.PROCESSANDO)
+        
+        count = queryset.count()
+        
+        # Enfileirar para processamento assíncrono
+        queue_batch_tasks(processar_produto_automatico, list(queryset))
+        
+        messages.success(
+            request,
+            f'✅ Forçada re-extração de {count} produto(s). '
+            f'Processamento em background (multi-plataforma)...'
+        )
     
-    @admin.action(description='Resetar contador de falhas')
+    @admin.action(description='Resetar contador de falhas e reativar')
     def resetar_falhas_action(self, request, queryset):
+        """
+        Reseta contador de falhas e reativa produtos (todas as plataformas).
+        """
         atualizado = queryset.update(
             falhas_consecutivas=0,
-            motivo_desativacao=''
+            motivo_desativacao='',
+            ativo=True  # Reativar produtos desativados
         )
         messages.success(
             request,
-            f'{atualizado} produto(s) tiveram contador de falhas resetado.'
+            f'✅ {atualizado} produto(s) reativado(s) e contador de falhas resetado.'
         )
 
 
