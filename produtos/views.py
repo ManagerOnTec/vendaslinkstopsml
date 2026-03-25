@@ -13,7 +13,7 @@ from django.db.models import Q, QuerySet
 from django.core.paginator import Paginator
 
 from .models import (
-    Produto, ProdutoAutomatico, Categoria, Anuncio,
+    ProdutoAutomatico, Categoria, Anuncio,
     AgendamentoAtualizacao, LogAtualizacao, DiaSemana, DocumentoLegal
 )
 
@@ -22,14 +22,13 @@ logger = logging.getLogger(__name__)
 
 class ProdutosCombinedListView(ListView):
     """
-    View unificada que lista AMBOS os tipos de produtos (Produto + ProdutoAutomatico).
+    View unificada que lista produtos (modelo único: ProdutoAutomatico com proxy models).
     
     Características:
     - Filtra ativos
     - Suporta busca por título (query 'q')
     - Suporta filtro por categoria
-    - Combina e ordena ambos os tipos
-    - Pagina o resultado combinado
+    - Mostra ambos manuais e automáticos na mesma listview
     
     Ordenação: destaque > ordem > data criação
     """
@@ -37,61 +36,50 @@ class ProdutosCombinedListView(ListView):
     context_object_name = 'produtos'
     paginate_by = settings.PRODUTOS_POR_PAGINA
     
-    def _get_search_query(self) -> Q:
-        """Retorna Q object para busca em títulos."""
-        busca = self.request.GET.get('q', '').strip()
-        if busca:
-            return Q(titulo__icontains=busca)
-        return Q()
-    
-    def _get_categoria_query(self) -> Q:
-        """Retorna Q object para filtro de categoria."""
-        categoria_slug = self.request.GET.get('categoria', '').strip()
-        if categoria_slug:
-            return Q(categoria__slug=categoria_slug)
-        return Q()
-    
     def get_queryset(self) -> List:
         """
-        Combina Produto e ProdutoAutomatico em uma lista única.
-        Retorna lista (não QuerySet) porque precisa combinar duas queries.
+        Retorna lista UNIFICADA de produtos (modelo único ProdutoAutomatico).
+        
+        FILTROS APLICADOS:
+        - Apenas produtos ATIVOS (ativo=True)
+        - Apenas produtos com status_extracao='sucesso' OU origem='manual'
+        - Suporta busca por título
+        - Suporta filtro por categoria
         """
-        busca_q = self._get_search_query()
-        categoria_q = self._get_categoria_query()
+        busca = self.request.GET.get('q', '').strip()
+        categoria_slug = self.request.GET.get('categoria', '').strip()
         
-        # Produtos manuais
-        produtos_manual = Produto.objects.filter(
-            ativo=True,
-            **({'categoria__slug': self.request.GET.get('categoria')} 
-               if self.request.GET.get('categoria') else {})
-        ).filter(busca_q).select_related('categoria')
+        # Query base: produtos ativos
+        queryset = ProdutoAutomatico.objects.filter(ativo=True).select_related('categoria')
         
-        # Produtos automáticos (apenas sucesso)
-        produtos_auto = ProdutoAutomatico.objects.filter(
-            ativo=True,
-            status_extracao='sucesso',
-            **({'categoria__slug': self.request.GET.get('categoria')} 
-               if self.request.GET.get('categoria') else {})
-        ).filter(busca_q).select_related('categoria')
+        # Filtro de categoria (se fornecido)
+        if categoria_slug:
+            queryset = queryset.filter(categoria__slug=categoria_slug)
         
-        # Combinar em lista
-        produtos_combinados = list(chain(produtos_manual, produtos_auto))
+        # Filtro de busca (se fornecido)
+        if busca:
+            queryset = queryset.filter(titulo__icontains=busca)
+        
+        # Produtos automáticos devem ter status='sucesso'
+        # Produtos manuais não têm restrição de status (são sempre sucesso)
+        from .models import OrigemProduto
+        queryset = queryset.filter(
+            Q(origem=OrigemProduto.MANUAL) |  # Manuais: sem restrição
+            Q(status_extracao='sucesso')       # Automáticos: apenas sucesso
+        )
         
         # Ordenar: destaque > ordem > data criação (decrescente)
-        produtos_combinados.sort(
-            key=lambda p: (
-                not p.destaque,  # False (destaque) vem primeiro
-                p.ordem,          # Menor ordem vem primeiro
-                -p.criado_em.timestamp() if hasattr(p, 'criado_em') else 0
-            )
-        )
+        queryset = queryset.order_by('-destaque', 'ordem', '-criado_em')
+        
+        count_manuais = queryset.filter(origem=OrigemProduto.MANUAL).count()
+        count_auto = queryset.filter(origem=OrigemProduto.AUTOMATICO).count()
         
         logger.info(
-            f"🔍 Listando {len(produtos_manual)} manuais + "
-            f"{len(produtos_auto)} automáticos = {len(produtos_combinados)} total"
+            f"🔍 Listando {count_manuais} manuais + "
+            f"{count_auto} automáticos = {queryset.count()} total"
         )
         
-        return produtos_combinados
+        return queryset
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -129,51 +117,41 @@ class CategoriaListView(ProdutosCombinedListView):
         context['categoria_atual'] = categoria_slug
         return context
     
-    def _get_categoria_query(self) -> Q:
-        """Override para usar categoria da URL em vez de GET."""
+    def get_queryset(self) -> QuerySet:
+        """
+        Retorna produtos filtrando pela categoria da URL.
+        Usa a mesma lógica unificada de ProdutosCombinedListView, apenas força a categoria.
+        """
         categoria_slug = self.kwargs.get('slug', '').strip()
+        
+        # Query base: produtos ativos
+        queryset = ProdutoAutomatico.objects.filter(ativo=True).select_related('categoria')
+        
+        # Filtro de categoria (obrigatório nesta view)
         if categoria_slug:
-            return Q(categoria__slug=categoria_slug)
-        return Q()
-    
-    def get_queryset(self) -> List:
-        """
-        Combina produtos filtrando pela categoria da URL.
-        """
-        busca_q = self._get_search_query()
-        categoria_slug = self.kwargs.get('slug', '')
+            queryset = queryset.filter(categoria__slug=categoria_slug)
         
-        # Produtos manuais
-        produtos_manual = Produto.objects.filter(
-            ativo=True,
-            categoria__slug=categoria_slug
-        ).filter(busca_q).select_related('categoria')
+        # Suporta busca por título
+        busca = self.request.GET.get('q', '').strip()
+        if busca:
+            queryset = queryset.filter(titulo__icontains=busca)
         
-        # Produtos automáticos (apenas sucesso)
-        produtos_auto = ProdutoAutomatico.objects.filter(
-            ativo=True,
-            status_extracao='sucesso',
-            categoria__slug=categoria_slug
-        ).filter(busca_q).select_related('categoria')
-        
-        # Combinar em lista
-        produtos_combinados = list(chain(produtos_manual, produtos_auto))
-        
-        # Ordenar: destaque > ordem > data criação
-        produtos_combinados.sort(
-            key=lambda p: (
-                not p.destaque,
-                p.ordem,
-                -p.criado_em.timestamp() if hasattr(p, 'criado_em') else 0
-            )
+        # Produtos automáticos devem ter status='sucesso'
+        # Produtos manuais não têm restrição de status
+        from .models import OrigemProduto
+        queryset = queryset.filter(
+            Q(origem=OrigemProduto.MANUAL) |  # Manuais: sem restrição
+            Q(status_extracao='sucesso')       # Automáticos: apenas sucesso
         )
+        
+        # Ordenar: destaque > ordem > data criação (decrescente)
+        queryset = queryset.order_by('-destaque', 'ordem', '-criado_em')
         
         logger.info(
-            f"📁 Categoria '{categoria_slug}': "
-            f"{len(produtos_manual)} manuais + {len(produtos_auto)} automáticos"
+            f"📁 Categoria '{categoria_slug}': {queryset.count()} produtos"
         )
         
-        return produtos_combinados
+        return queryset
 
 
 @method_decorator(csrf_exempt, name='dispatch')

@@ -25,6 +25,7 @@ class DetectorPlataforma:
             r'amazon\.fr',
         ],
         'shopee': [
+            r's\.shopee\.com\.br',  # URL curta (redireciona para /product/)
             r'shopee\.com\.br',
             r'shopee\.sg',
             r'shopee\.ph',

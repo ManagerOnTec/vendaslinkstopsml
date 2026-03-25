@@ -229,6 +229,22 @@ async def _extrair_dados_ml(url: str) -> dict:
                         }
                     } catch (e) {}
 
+                    try {
+                        // ✅ ESTRATÉGIA 5 (NOVA): Pegar segundo item do breadcrumb no DOM
+                        // Fallback quando as outras estratégias falham
+                        const breadcrumbLinks = document.querySelectorAll('[class*="breadcrumb"] a');
+                        if (breadcrumbLinks.length >= 2) {
+                            // Pegar o SEGUNDO link (índice 1) - primeira categoria relevante
+                            const secondLink = breadcrumbLinks[1];
+                            if (secondLink) {
+                                const categoryText = secondLink.textContent.trim();
+                                if (categoryText && categoryText !== 'Home' && categoryText.length > 0) {
+                                    return categoryText;
+                                }
+                            }
+                        }
+                    } catch (e) {}
+
                     return '';
                 };
 
@@ -334,7 +350,7 @@ async def _extrair_dados_ml(url: str) -> dict:
 
                 // ===== DETECTAR TIPO DE PÁGINA =====
                 const isPDP = !!document.querySelector('.ui-pdp-price');
-                const isSocial = window.location.pathname.includes('/social/');
+                const isSocial = window.location.pathname.startsWith('/social/');  // ✅ Mais robusto
 
                 let titulo = '';
                 let imgSrc = '';
@@ -343,9 +359,146 @@ async def _extrair_dados_ml(url: str) -> dict:
                 let descricao = '';
                 let categoria = extractCategory();
 
-                if (isPDP) {
+                // ===== FUNÇÕES DE EXTRAÇÃO DE PREÇO MERCADO LIVRE =====
+                // Definidas aqui (fora dos if/else) para serem acessíveis em todos os contextos
+                
+                const extractMLPrice = () => {
+                    let price = '';
+                    let estrategiaUsada = '';
+                    
+                    // ESTRATÉGIA 1: Procurar PRIMEIRO pela seção de "Melhor Preço"
+                    // Esta seção SEMPRE contém o menor preço
+                    // Seletores: section[class*="bestPrice"], div[data-testid*="best"], [aria-label*="Melhor Preço"]
+                    const bestPriceContainers = document.querySelectorAll(
+                        'section[class*="bestPrice"], ' +
+                        'div[class*="best-price"], ' +
+                        '[data-testid*="best"], ' +
+                        '[aria-label*="Melhor Preço"]'
+                    );
+                    
+                    for (const container of bestPriceContainers) {
+                        // Validar: DEVE conter "Melhor" e NÃO deve conter "Frete" OU "Loja Oficial"
+                        const containerText = container.textContent.toLowerCase();
+                        if (containerText.includes('melhor') && !containerText.includes('frete') && !containerText.includes('loja oficial')) {
+                            const moneyEl = container.querySelector('.andes-money-amount');
+                            if (moneyEl) {
+                                price = extractPrice(moneyEl);
+                                if (price) {
+                                    estrategiaUsada = 'Melhor Preço (Estratégia 1)';
+                                    return { price, estrategiaUsada };
+                                }
+                            }
+                        }
+                    }
+                    
+                    // ESTRATÉGIA 2: Procurar por "Ofertas" (segunda melhor opção)
+                    const offersContainers = document.querySelectorAll(
+                        '[class*="offer"], [aria-label*="Oferta"]'
+                    );
+                    
+                    for (const container of offersContainers) {
+                        const containerText = container.textContent.toLowerCase();
+                        // ❌ Rejeitar: "frete", "envio", "loja oficial"
+                        if (
+                            containerText.includes('frete') ||
+                            containerText.includes('envio') ||
+                            containerText.includes('loja oficial') ||
+                            containerText.includes('mercado') && containerText.includes('oferta')  // Evita "Mercado Livre Oficial"
+                        ) {
+                            continue;
+                        }
+                        
+                        const moneyEl = container.querySelector('.andes-money-amount');
+                        if (moneyEl && !price) {
+                            price = extractPrice(moneyEl);
+                            if (price) {
+                                estrategiaUsada = 'Ofertas (Estratégia 2)';
+                                return { price, estrategiaUsada };
+                            }
+                        }
+                    }
+                    
+                    // ESTRATÉGIA 3: Se ainda não achou, procurar preço do VENDEDOR (não da Loja Oficial)
+                    // Seletores específicos para preço de vendidor (não oficial)
+                    const vendorPriceContainers = document.querySelectorAll(
+                        '.ui-pdp-price__second-line, ' +
+                        '[class*="seller-price"], ' +
+                        '[data-testid*="price"]'
+                    );
+                    
+                    for (const container of vendorPriceContainers) {
+                        const containerText = container.textContent.toLowerCase();
+                        // ❌ NUNCA peguei de Loja Oficial
+                        if (containerText.includes('loja oficial') || containerText.includes('mercado livre')) {
+                            continue;
+                        }
+                        
+                        const moneyEl = container.querySelector('.andes-money-amount');
+                        if (moneyEl && !price) {
+                            price = extractPrice(moneyEl);
+                            if (price) {
+                                estrategiaUsada = 'Preço do Vendedor (Estratégia 3)';
+                                return { price, estrategiaUsada };
+                            }
+                        }
+                    }
+                    
+                    return { price: '', estrategiaUsada: 'Nenhuma estratégia funcionou' };
+                };
+
+                // ===== MERCADO LIVRE - FUNÇÃO PARA PREÇO AFILIADO (SOCIAL) =====
+                // Em páginas /social/, NÃO use "melhor preço"
+                // Pegue APENAS o preço do card afiliado (primeiro card)
+                const extractMLSocialPrice = () => {
+                    // PREÇO ATUAL do card afiliado (primeiro)
+                    const currentPriceEl = document.querySelector(
+                        '.poly-price__current .andes-money-amount'
+                    );
+                    const precoAtual = extractPrice(currentPriceEl);
+
+                    // PREÇO ORIGINAL (riscado), se existir
+                    const originalPriceEl = document.querySelector(
+                        '.poly-component__price s .andes-money-amount'
+                    );
+                    const precoOriginal = extractPrice(originalPriceEl);
+
+                    return {
+                        preco: precoAtual,
+                        precoOriginal: precoOriginal
+                    };
+                };
+
+                if (isSocial) {
                     // ========================================
-                    // PÁGINA DE PRODUTO INDIVIDUAL (PDP)
+                    // MERCADO LIVRE - PERFIL SOCIAL (AFILIADO)
+                    // ========================================
+                    // SEMPRE TESTAR /social/ ANTES de PDP
+                    // Pega APENAS o preço do card afiliado, nunca loja oficial
+
+                    // TÍTULO
+                    const titleEl = document.querySelector('.poly-component__title');
+                    titulo = titleEl ? titleEl.textContent.trim() : '';
+
+                    // IMAGEM
+                    const imgEl = document.querySelector('.poly-component__picture img');
+                    imgSrc = imgEl && imgEl.src ? imgEl.src : '';
+
+                    // PREÇOS — SOMENTE DO CARD AFILIADO
+                    const currentPriceEl = document.querySelector(
+                        '.poly-price__current .andes-money-amount'
+                    );
+                    preco = extractPrice(currentPriceEl);
+
+                    const originalPriceEl = document.querySelector(
+                        '.poly-component__price s .andes-money-amount'
+                    );
+                    precoOriginal = extractPrice(originalPriceEl);
+
+                    descricao = titulo;
+
+                } else if (isPDP) {
+                    // ========================================
+                    // MERCADO LIVRE - PDP TRADICIONAL
                     // ========================================
 
                     // TÍTULO
@@ -355,7 +508,6 @@ async def _extrair_dados_ml(url: str) -> dict:
                         : (getMeta('og:title') || document.title || '');
 
                     // IMAGEM - Priorizar galeria do produto
-                    // 1) Imagem da galeria com data-zoom (máxima resolução)
                     const galleryFig = document.querySelector(
                         '.ui-pdp-gallery__figure img'
                     );
@@ -363,101 +515,26 @@ async def _extrair_dados_ml(url: str) -> dict:
                         imgSrc = galleryFig.getAttribute('data-zoom')
                             || galleryFig.src || '';
                     }
-                    // 2) Qualquer figure img na seção do produto
-                    if (!imgSrc) {
-                        const figImg = document.querySelector(
-                            '.ui-pdp-gallery figure img, figure img'
-                        );
-                        if (figImg) {
-                            imgSrc = figImg.getAttribute('data-zoom')
-                                || figImg.src || '';
-                        }
-                    }
-                    // 3) og:image como fallback (geralmente é imagem real)
+                    // Fallback: og:image
                     if (!imgSrc) {
                         imgSrc = getMeta('og:image') || '';
                     }
-                    // 4) Busca inteligente como último recurso
+                    // Último recurso: busca inteligente
                     if (!imgSrc) {
                         imgSrc = findProductImage(
                             document.querySelector('.ui-pdp-container__row')
                         );
                     }
 
-                    // PREÇO ATUAL
-                    const secondLine = document.querySelector(
-                        '.ui-pdp-price__second-line'
-                    );
-                    if (secondLine) {
-                        const partContainer = secondLine.querySelector(
-                            '.ui-pdp-price__part__container'
-                        );
-                        if (partContainer) {
-                            const mainMoney = partContainer.querySelector(
-                                '.andes-money-amount'
-                            );
-                            preco = extractPrice(mainMoney);
-                        }
-                        if (!preco) {
-                            const firstMoney = secondLine.querySelector(
-                                '.andes-money-amount'
-                            );
-                            preco = extractPrice(firstMoney);
-                        }
-                    }
-
-                    // Estratégia 2: meta itemprop="price"
-                    if (!preco) {
-                        const metaPriceEl = document.querySelector(
-                            '.ui-pdp-price__second-line meta[itemprop="price"]'
-                        );
-                        if (metaPriceEl) {
-                            const val = parseFloat(metaPriceEl.content);
-                            if (!isNaN(val)) {
-                                preco = val.toLocaleString('pt-BR', {
-                                    minimumFractionDigits: 0,
-                                    maximumFractionDigits: 2
-                                });
-                            }
-                        }
-                    }
-
-                    // Estratégia 3: aria-label
-                    if (!preco && secondLine) {
-                        const mainMoney = secondLine.querySelector(
-                            '.andes-money-amount[aria-label]'
-                        );
-                        if (mainMoney) {
-                            const label = mainMoney.getAttribute('aria-label');
-                            const match = label.match(
-                                /([\d.]+)\s*reais(?:\s*com\s*(\d+)\s*centavos)?/
-                            );
-                            if (match) {
-                                let num = parseInt(
-                                    match[1].replace(/\./g, ''), 10
-                                );
-                                preco = num.toLocaleString('pt-BR');
-                                if (match[2]) {
-                                    preco += ',' + match[2].padStart(2, '0');
-                                }
-                            }
-                        }
-                    }
-
-                    // Estratégia 4: meta product:price:amount
-                    if (!preco) {
-                        const metaProductPrice = getMeta(
-                            'product:price:amount'
-                        );
-                        if (metaProductPrice) {
-                            const numPrice = parseFloat(metaProductPrice);
-                            if (!isNaN(numPrice)) {
-                                preco = numPrice.toLocaleString('pt-BR', {
-                                    minimumFractionDigits: 0,
-                                    maximumFractionDigits: 2
-                                });
-                            }
-                        }
+                    // PREÇO PDP (melhor preço entre vendedores)
+                    const precoResult = extractMLPrice();
+                    preco = precoResult.price;
+                    
+                    // Armazenar info de estratégia para logging
+                    if (precoResult.estrategiaUsada) {
+                        out._debug_preco = {
+                            estrategia: precoResult.estrategiaUsada
+                        };
                     }
 
                     // PREÇO ORIGINAL (riscado)
@@ -483,61 +560,6 @@ async def _extrair_dados_ml(url: str) -> dict:
 
                     // DESCRIÇÃO
                     descricao = getMeta('og:description') || '';
-
-                } else if (isSocial) {
-                    // ========================================
-                    // PÁGINA DE PERFIL SOCIAL (afiliado)
-                    // ========================================
-
-                    // TÍTULO: primeiro link de produto
-                    const heroLink = document.querySelector(
-                        'a[href*="/p/MLB"], a[href*="MLB-"]'
-                    );
-                    if (heroLink) {
-                        titulo = heroLink.textContent.trim();
-                    }
-                    if (!titulo) {
-                        const firstProductTitle = document.querySelector(
-                            '.poly-component__title, ' +
-                            '[class*="hero"] a, ' +
-                            '.poly-card a'
-                        );
-                        if (firstProductTitle) {
-                            titulo = firstProductTitle.textContent.trim();
-                        }
-                    }
-
-                    // IMAGEM: usar busca inteligente que filtra banners
-                    // Priorizar .poly-component__picture (imagem do card)
-                    const polyPicImg = document.querySelector(
-                        '.poly-component__picture img'
-                    );
-                    if (polyPicImg && polyPicImg.src
-                        && !polyPicImg.src.startsWith('data:')) {
-                        imgSrc = polyPicImg.src;
-                    }
-                    // Fallback: busca inteligente
-                    if (!imgSrc) {
-                        imgSrc = findProductImage(document);
-                    }
-
-                    // PREÇO ATUAL: primeiro .poly-price__current
-                    const currentPriceEl = document.querySelector(
-                        '.poly-price__current .andes-money-amount'
-                    );
-                    preco = extractPrice(currentPriceEl);
-
-                    // PREÇO ORIGINAL: primeiro .poly-component__price
-                    const origPriceEl = document.querySelector(
-                        '.poly-component__price .andes-money-amount'
-                    );
-                    const origPriceText = extractPrice(origPriceEl);
-                    if (origPriceText && origPriceText !== preco) {
-                        precoOriginal = origPriceText;
-                    }
-
-                    // DESCRIÇÃO
-                    descricao = getMeta('og:description') || titulo;
 
                 } else {
                     // ========================================
@@ -595,7 +617,32 @@ async def _extrair_dados_ml(url: str) -> dict:
             if dados['preco_original'] and not dados['preco_original'].startswith('R$'):
                 dados['preco_original'] = f"R$ {dados['preco_original']}"
             
-            logger.info(f"DEBUG: Após formatação - categoria: '{dados.get('categoria', '')}'")
+            # ===== LOGGING DETALHADO DE MERCADO LIVRE =====
+            logger.info(f"✅ Mercado Livre: {dados['titulo'][:60] if dados['titulo'] else 'SEM TÍTULO'}")
+            
+            # Log detalhado de preço com estratégia correta
+            if dados.get('preco'):
+                debug_info = result.get('_debug_preco', {})
+                estrategia = debug_info.get('estrategia', '')
+                if not estrategia:
+                    estrategia = 'Nenhuma estratégia funcionou (preço vazio)'
+                logger.info(f"   💰 Preço: {dados['preco']}")
+                logger.info(f"      └─ Estratégia: {estrategia}")
+            else:
+                logger.warning(f"   💰 Preço: ❌ NÃO ENCONTRADO")
+            
+            # Log detalhado de preço original
+            if dados.get('preco_original'):
+                logger.info(f"   📌 Preço Original: {dados['preco_original']}")
+                logger.info(f"      └─ Desconto detectado")
+            else:
+                logger.info(f"   📌 Preço Original: (sem desconto)")
+            
+            # Log de categoria
+            if dados.get('categoria'):
+                logger.info(f"   🏷️  Categoria: {dados['categoria']}")
+            else:
+                logger.warning(f"   🏷️  Categoria: ❌ NÃO ENCONTRADA")
 
         except Exception as e:
             logger.error(f"Erro ao extrair dados de {url}: {e}")
@@ -711,14 +758,19 @@ async def _extrair_dados_amazon(url: str) -> dict:
                             if (json.description) data.descricao = json.description;
                         }
                         
-                        // Extrair categoria de BreadcrumbList
+                        // Extrair categoria de BreadcrumbList (apenas PRIMEIRA categoria relevante)
                         if (json['@type'] === 'BreadcrumbList' && json.itemListElement) {
-                            const breadcrumbs = json.itemListElement
-                                .filter(item => item.name && item.name !== 'Home')
-                                .slice(-2)
-                                .map(item => item.name);
-                            if (breadcrumbs.length > 0) {
-                                data.categoria = breadcrumbs.join(' > ');
+                            // Pegar TODOS os itens e depois filtrar
+                            let firstCategory = null;
+                            for (const item of json.itemListElement) {
+                                // Pegar o primeiro item que NÃO seja "Home" e tenha nome válido
+                                if (item.name && item.name.trim() !== 'Home' && item.name.trim().length > 0) {
+                                    firstCategory = item.name.trim();
+                                    break;  // Parar no PRIMEIRO encontrado
+                                }
+                            }
+                            if (firstCategory) {
+                                data.categoria = firstCategory;
                             }
                         }
                     } catch (e) {}
@@ -735,8 +787,9 @@ async def _extrair_dados_amazon(url: str) -> dict:
                 dados['descricao'] = json_ld_result.get('descricao', '').strip()[:1000]
                 dados['categoria'] = json_ld_result.get('categoria', '').strip()[:100]
                 logger.info(f"Amazon (JSON-LD): ✅ {dados['titulo'][:60]}")
-                logger.info(f"   Preço: {'✅' if dados['preco'] else '❌'} {dados['preco'] or 'NÃO ENCONTRADO'}")
-                logger.info(f"   Categoria: {'✅' if dados['categoria'] else '❌'} {dados['categoria'] or 'NÃO ENCONTRADA'}")
+                logger.info(f"   💰 Preço: {'✅' if dados['preco'] else '❌'} {dados['preco'] or 'NÃO ENCONTRADO'}")
+                logger.info(f"      └─ Estratégia: Schema.org JSON-LD (mais confiável)")
+                logger.info(f"   🏷️  Categoria: {'✅' if dados['categoria'] else '❌'} {dados['categoria'] or 'NÃO ENCONTRADA'}")
             else:
                 # SEGUNDO: Tentar CSS Selectors (mais lento)
                 result = await page.evaluate('''() => {
@@ -764,13 +817,35 @@ async def _extrair_dados_amazon(url: str) -> dict:
                     }
 
                     // ===== PREÇO =====
-                    let priceContainer = document.querySelector('[data-a-color="price"] span.a-price-whole');
-                    if (priceContainer) {
-                        let priceText = priceContainer.textContent.trim();
-                        if (priceText && !priceText.includes('R$')) {
-                            priceText = 'R$ ' + priceText;
+                    // Estratégia 1: usar a-offscreen (recomendado - contém valor completo limpo)
+                    // Procurar em múltiplos contextos pois Amazon é dinâmica
+                    let priceSearchSelectors = [
+                        'span.a-price span.a-offscreen',           // Método principal
+                        '.a-price-whole',                           // Preço inteiro
+                        'span[data-a-color="price"] span',          // Contexto de preço
+                        'div[class*="price"] span.a-offscreen',    // Em div de preço
+                        '.a-price span:not(.a-price-fraction)',     // Qualquer span em a-price que não seja fração
+                    ];
+                    
+                    for (const selector of priceSearchSelectors) {
+                        priceEl = document.querySelector(selector);
+                        if (priceEl) {
+                            const text = priceEl.textContent.trim();
+                            if (text && /R\$|[0-9]/.test(text) && text.length < 50) {
+                                data.preco = text;
+                                break;
+                            }
                         }
-                        data.preco = priceText;
+                    }
+                    
+                    // Estratégia 2: Fallback - procurar por padrão regex
+                    if (!data.preco) {
+                        const pageText = document.body.innerText;
+                        // Procurar por "R$ XXX,XX" ou similar
+                        const match = pageText.match(/R\$\s*[\d.,]+(?:,\d{2})?/);
+                        if (match) {
+                            data.preco = match[0];
+                        }
                     }
 
                     // ===== IMAGEM =====
@@ -793,14 +868,16 @@ async def _extrair_dados_amazon(url: str) -> dict:
                     }
 
                     // ===== CATEGORIA =====
-                    // Estratégia 1: Procurar breadcrumb na página
+                    // Estratégia 1: Procurar breadcrumb na página (pegar PRIMEIRA categoria relevante)
                     const breadcrumbLinks = document.querySelectorAll('[class*="breadcrumb"] a, [data-testid*="breadcrumb"] a');
                     if (breadcrumbLinks.length > 0) {
-                        const breadcrumbs = Array.from(breadcrumbLinks)
-                            .map(link => link.textContent.trim())
-                            .filter(text => text && text !== 'Home' && text.length > 0 && text.length < 50);
-                        if (breadcrumbs.length > 0) {
-                            data.categoria = breadcrumbs.slice(-2).join(' > ');
+                        // Iterar pelos links e pegar o PRIMEIRO que não seja Home
+                        for (const link of breadcrumbLinks) {
+                            const text = link.textContent.trim();
+                            if (text && text !== 'Home' && text.length > 0 && text.length < 50) {
+                                data.categoria = text;  // APENAS PRIMEIRO
+                                break;
+                            }
                         }
                     }
 
@@ -813,8 +890,9 @@ async def _extrair_dados_amazon(url: str) -> dict:
                 dados['descricao'] = result.get('descricao', '').strip()[:1000]
                 dados['categoria'] = result.get('categoria', '').strip()[:100]
                 logger.info(f"Amazon (CSS Fallback): {'✅' if dados['titulo'] else '❌'} {dados['titulo'][:60] if dados['titulo'] else 'SEM TÍTULO'}")
-                logger.info(f"   Preço: {'✅' if dados['preco'] else '❌'} {dados['preco'] or 'NÃO ENCONTRADO'}")
-                logger.info(f"   Categoria: {'✅' if dados['categoria'] else '❌'} {dados['categoria'] or 'NÃO ENCONTRADA'}")
+                logger.info(f"   💰 Preço: {'✅' if dados['preco'] else '❌'} {dados['preco'] or 'NÃO ENCONTRADO'}")
+                logger.info(f"      └─ Estratégia: CSS Selectors (.a-price-whole, span.a-offscreen, etc)")
+                logger.info(f"   🏷️  Categoria: {'✅' if dados['categoria'] else '❌'} {dados['categoria'] or 'NÃO ENCONTRADA'}")
 
             # TERCEIRO: Se ainda vazio e requests disponível, usar fallback com requests
             if not dados['titulo'] and REQUESTS_AVAILABLE:
@@ -865,8 +943,13 @@ async def _extrair_dados_amazon(url: str) -> dict:
 
 async def _extrair_dados_shopee(url: str) -> dict:
     """
-    Scraper robusto para Shopee usando seletores diretos.
-    Aplica: 1. Aguardar elemento visível 2. Meta tags com fallback 3. Validação de dados
+    Shopee - Extração simplificada.
+    
+    Extrai apenas:
+    - Título (h1 ou meta og:title)
+    - Imagem (og:image ou maior imagem real)
+    - Categoria (breadcrumb)
+    - Preço: DEFAULT = "Confirmar na loja oficial" (não é extraído)
     """
     _enforce_rate_limit()
     
@@ -875,12 +958,12 @@ async def _extrair_dados_shopee(url: str) -> dict:
     dados = {
         'titulo': '',
         'imagem_url': '',
-        'preco': '',
+        'preco': 'Confirmar na loja oficial',  # ✅ DEFAULT
         'preco_original': '',
         'descricao': '',
         'categoria': '',
         'url_final': '',
-        'plataforma': 'Shopee',
+        'plataforma': 'shopee',
     }
 
     async with async_playwright() as p:
@@ -889,224 +972,96 @@ async def _extrair_dados_shopee(url: str) -> dict:
             args=['--no-sandbox', '--disable-blink-features=AutomationControlled']
         )
         context = await browser.new_context(
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            user_agent=(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            ),
+            locale='pt-BR',
+            viewport={'width': 1366, 'height': 768}
         )
+
         page = await context.new_page()
 
         try:
-            await page.goto(url, wait_until='domcontentloaded', timeout=40000)
-            
-            # Aguardar elementos críticos aparecerem
-            try:
-                await page.wait_for_selector('h1', timeout=10000)
-            except:
-                logger.warning("⚠️  Shopee: h1 não encontrado, continuando...")
-            
+            timeout = 45000 if DetectorPlataforma.eh_url_encurtada(url) else 30000
+            await page.goto(url, wait_until='domcontentloaded', timeout=timeout)
             await page.wait_for_timeout(3000)
+
             dados['url_final'] = page.url
 
-            # Extração PRIORIZADA: Schema.org JSON-LD (mais confiável que CSS)
-            json_ld_result = await page.evaluate('''() => {
-                const data = {
+            result = await page.evaluate(r"""() => {
+                const out = {
                     titulo: '',
-                    preco: '',
-                    imagem: '',
-                    descricao: '',
+                    imagem_url: '',
                     categoria: '',
                 };
 
-                // Buscar Schema.org JSON-LD
-                const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-                for (const script of scripts) {
-                    try {
-                        const json = JSON.parse(script.textContent);
-                        
-                        // Procurar Product ou BreadcrumbList
-                        if (json['@type'] === 'Product' || json.type === 'Product') {
-                            if (json.name) data.titulo = json.name;
-                            if (json.offers && json.offers.price) {
-                                // Preço pode vir como string ou number
-                                let price = json.offers.price;
-                                if (typeof price === 'number') {
-                                    price = price.toString();
-                                }
-                                // Formatar com R$
-                                if (price && !price.includes('R$')) {
-                                    data.preco = 'R$ ' + price;
-                                } else {
-                                    data.preco = price;
-                                }
-                            }
-                            if (json.image) {
-                                const img = Array.isArray(json.image) ? json.image[0] : json.image;
-                                data.imagem = typeof img === 'string' ? img : img.url;
-                            }
-                            if (json.description) data.descricao = json.description;
-                        }
-                        
-                        // Breadcrumb para categoria
-                        if (json['@type'] === 'BreadcrumbList' && json.itemListElement) {
-                            const items = json.itemListElement
-                                .filter(item => item.name && !item.name.includes('Home'))
-                                .slice(-2)
-                                .map(item => item.name);
-                            if (items.length > 0) {
-                                data.categoria = items.join(' > ');
-                            }
-                        }
-                    } catch (e) {
-                        // Script JSON-LD inválido, pular
+                const getMeta = (prop) => {
+                    const el =
+                        document.querySelector(`meta[property="${prop}"]`) ||
+                        document.querySelector(`meta[name="${prop}"]`);
+                    return el ? (el.content || '') : '';
+                };
+
+                // ---------- TÍTULO ----------
+                const h1 = document.querySelector('h1');
+                out.titulo = (h1?.innerText || getMeta('og:title') || document.title || '').trim();
+
+                // ---------- IMAGEM ----------
+                out.imagem_url = (getMeta('og:image') || '').trim();
+
+                // Fallback: maior imagem real
+                if (!out.imagem_url) {
+                    const imgs = Array.from(document.images || []);
+                    let best = null;
+                    for (const img of imgs) {
+                        const src = img.currentSrc || img.src || '';
+                        if (!src || src.startsWith('data:')) continue;
+                        const w = img.naturalWidth || img.width || 0;
+                        const h = img.naturalHeight || img.height || 0;
+                        if (w < 350 || h < 350) continue;
+                        const area = w * h;
+                        if (!best || area > best.area) best = { src, area };
                     }
+                    out.imagem_url = best ? best.src : '';
                 }
-                
-                return data;
-            }''')
 
-            # Se JSON-LD funcionou, usar resultados (evita extração CSS pesada)
-            if json_ld_result.get('titulo'):
-                dados['titulo'] = json_ld_result['titulo'].strip()[:300]
-                dados['preco'] = json_ld_result.get('preco', '').strip()[:50]
-                dados['imagem_url'] = json_ld_result.get('imagem', '').strip()
-                dados['descricao'] = json_ld_result.get('descricao', '').strip()[:1000]
-                dados['categoria'] = json_ld_result.get('categoria', '').strip()[:100]
-                
-                logger.info(f"Shopee (JSON-LD): ✅ {dados['titulo'][:60] if dados['titulo'] else 'SEM TÍTULO'}")
-                logger.info(f"   Preço: {'✅' if dados['preco'] else '❌'} {dados['preco'] or 'NÃO ENCONTRADO'}")
-            else:
-                # Fallback: Extração via CSS (mais lenta, mas mantém compatibilidade)
-                # Extração via JavaScript com seletores simples e diretos
-                result = await page.evaluate('''() => {
-                    const getMeta = (prop) => {
-                        const el = document.querySelector(`meta[property="${prop}"]`) || 
-                                   document.querySelector(`meta[name="${prop}"]`);
-                        return el ? el.getAttribute('content') || el.getAttribute('value') : '';
-                    };
-
-                    const data = {
-                        titulo: '',
-                        preco: '',
-                        preco_original: '',
-                        imagem: '',
-                        descricao: '',
-                        categoria: '',
-                    };
-
-                    // ===== TÍTULO =====
-                    // Estratégia 1: <h1> direto (mais confiável em Shopee)
-                    const h1 = document.querySelector('h1');
-                    if (h1 && h1.textContent.trim()) {
-                        data.titulo = h1.textContent.trim().substring(0, 300);
-                    }
-                    
-                    // Estratégia 2: Meta tag og:title
-                    if (!data.titulo) {
-                        data.titulo = getMeta('og:title') || getMeta('title');
-                    }
-
-                    // ===== PREÇO =====
-                    // Estratégia 1: Usar data-testid (Shopee moderno)
-                    const priceEl = document.querySelector('[data-testid="product-price"]');
-                    if (priceEl) {
-                        data.preco = priceEl.textContent.trim();
-                    }
-                    
-                    // Estratégia 2: Procurar classe priceMoney
-                    if (!data.preco) {
-                        const priceAmount = document.querySelector('.priceMoney__amount');
-                        if (priceAmount) {
-                            data.preco = priceAmount.textContent.trim();
+                // ---------- CATEGORIA (breadcrumb) ----------
+                try {
+                    const breadcrumbLinks = document.querySelectorAll('div[class*="breadcrumb"] a, ._2TSj9W a');
+                    for (const link of breadcrumbLinks) {
+                        const text = (link.innerText || link.textContent || '').trim();
+                        if (text && text !== 'Shopee' && text.length > 0) {
+                            out.categoria = text;
+                            break;
                         }
                     }
-                    
-                    // Estratégia 3: Buscar "R$" em spans verificando contexto
-                    if (!data.preco) {
-                        const allSpans = document.querySelectorAll('span');
-                        for (const span of allSpans) {
-                            const text = span.textContent.trim();
-                            if (text.includes('R$') && /\\d+/.test(text) && text.length < 50) {
-                                const parent = span.parentElement;
-                                const parentClass = parent ? parent.className.toLowerCase() : '';
-                                if (!parentClass.includes('description') && !parentClass.includes('desc')) {
-                                    data.preco = text.trim();
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                } catch (e) {
+                    out.categoria = '';
+                }
 
-                    // ===== IMAGEM =====
-                    // Estratégia 1: Buscar em divs com "gallery" ou "product-image"
-                    const galleryImg = document.querySelector('[class*="gallery"] img, [class*="image"] img');
-                    if (galleryImg && galleryImg.src && !galleryImg.src.startsWith('data:')) {
-                        let src = galleryImg.src;
-                        // Otimizar qualidade da imagem Shopee
-                        if (src.includes('shopee')) {
-                            src = src.replace(/w\\d+_h\\d+/, 'w800_h800');
-                        }
-                        data.imagem = src;
-                    }
-                    
-                    // Estratégia 2: Meta tag og:image
-                    if (!data.imagem) {
-                        data.imagem = getMeta('og:image');
-                    }
+                return out;
+            }""")
 
-                    // ===== DESCRIÇÃO =====
-                    // Estratégia 1: Texto da meta tag
-                    data.descricao = getMeta('og:description') || getMeta('description');
-                    
-                    // ===== CATEGORIA =====
-                    // Estratégia 1: Usar data-testid específico (Shopee)
-                    const categoryEl = document.querySelector('[data-testid="product-category"]');
-                    if (categoryEl) {
-                        data.categoria = categoryEl.textContent.trim();
-                    }
-                    
-                    // Estratégia 2: Procurar breadcrumb que NÃO seja de menu
-                    if (!data.categoria) {
-                        const breadcrumbs = [];
-                        const breadcrumbLinks = document.querySelectorAll('[class*="breadcrumb"] a');
-                        for (const link of breadcrumbLinks) {
-                            const text = link.textContent.trim();
-                            if (text && text.length > 0 && text.length < 50 && 
-                                !text.includes('Home') && 
-                                !text.includes('Central do') &&
-                                !text.includes('Vender') &&
-                                !text.includes('Vendedor')) {
-                                breadcrumbs.push(text);
-                            }
-                        }
-                        if (breadcrumbs.length > 0) {
-                            data.categoria = breadcrumbs.slice(0, 2).join(' > ');
-                        }
-                    }
+            dados['titulo'] = result.get('titulo', '') or ''
+            dados['imagem_url'] = result.get('imagem_url', '') or ''
+            dados['categoria'] = result.get('categoria', '') or ''
 
-                    return data;
-                }''')
+            # Logging
+            logger.info(f"✅ Shopee: {dados['titulo'][:60] if dados['titulo'] else 'SEM TÍTULO'}")
+            logger.info(f"   💰 Preço: {dados['preco']}")
+            logger.info(f"   🏷️  Categoria: {dados['categoria'] or '❌ NÃO ENCONTRADA'}")
+            logger.info(f"   🖼️  Imagem: {'✅ OK' if dados['imagem_url'] else '❌ NÃO ENCONTRADA'}")
 
-                # Aplicar dados extraídos via CSS fallback
-                dados['titulo'] = result.get('titulo', '').strip()[:300]
-                dados['preco'] = result.get('preco', '').strip()[:50]
-                dados['imagem_url'] = result.get('imagem', '').strip()
-                dados['descricao'] = result.get('descricao', '').strip()[:1000]
-                dados['categoria'] = result.get('categoria', '').strip()[:100]
-                
-                logger.info(f"Shopee (CSS Fallback): {'✅' if dados['titulo'] else '❌'} {dados['titulo'][:60] if dados['titulo'] else 'SEM TÍTULO'}")
-
-            # Logging detalhado
-            logger.info(f"Shopee: {'✅' if dados['titulo'] else '❌'} {dados['titulo'][:60] if dados['titulo'] else 'SEM TÍTULO'}")
-            logger.info(f"   {'✅' if dados['preco'] else '❌'} Preço: {dados['preco'] or 'NÃO ENCONTRADO'}")
-            logger.info(f"   {'✅' if dados['imagem_url'] else '❌'} Imagem: {dados['imagem_url'][:50] if dados['imagem_url'] else 'NÃO ENCONTRADA'}")
-            logger.info(f"   {'✅' if dados['categoria'] else '❌'} Categoria: {dados['categoria'] or 'NÃO ENCONTRADA'}")
+            return dados
 
         except Exception as e:
             error_msg = str(e)[:100]
             logger.error(f"❌ Erro Shopee: {error_msg}")
             dados['erro_extracao'] = error_msg
+            raise
         finally:
             await browser.close()
-
-    return dados
 
 
 async def _extrair_dados_genererico(url: str, plataforma: str) -> dict:
@@ -1232,15 +1187,47 @@ def extrair_dados_produto(url: str) -> dict:
             raise
 
 
-def processar_produto_automatico(produto):
-    """Processa um ProdutoAutomatico: extrai dados do ML e atualiza o registro.
+def _validar_campos_criticos(dados: dict) -> tuple[bool, str]:
+    """
+    Valida se todos os campos críticos foram extraídos com sucesso.
     
-    Implementa desativação automática com retry backoff:
-    - Falha 1 → aguarda 5min e tenta novamente
-    - Falha 2 → aguarda 15min e tenta novamente
-    - Falha 3 → aguarda 1h e tenta novamente
-    - Falha 4 → aguarda 4h e tenta novamente
-    - Falha 5 → desativa produto permanentemente
+    Campos críticos (conforme requisito do usuário):
+    - titulo (string não vazia)
+    - preco (string não vazia)
+    - imagem_url (string não vazia)
+    - categoria (string não vazia) ✅ ADICIONADO
+    
+    Se qualquer um estiver vazio → status=ERRO + auto-deactivation após 2 falhas
+    
+    Retorna: (válido, mensagem_erro)
+    """
+    campos_obrigatorios = {
+        'titulo': 'Título não foi extraído',
+        'preco': 'Preço não foi encontrado',
+        'imagem_url': 'Imagem não foi encontrada',
+        'categoria': 'Categoria não foi extraída',
+    }
+    
+    for campo, msg_erro in campos_obrigatorios.items():
+        valor = dados.get(campo, '').strip()
+        if not valor:
+            return False, msg_erro
+    
+    return True, ''
+
+
+def processar_produto_automatico(produto):
+    """Processa um ProdutoAutomatico com validação rigorosa e retry.
+    
+    NOVO: Validação de campos críticos
+    - Se algum campo ficar vazio (titulo, preco, imagem_url) → ERRO
+    - Máx 2 tentativas de atualização
+    - Após 2 falhas → desativa produto (ativo=False)
+    
+    Retry automático:
+    - Falha 1 → aguarda 5min (~proxima janela de atualização)
+    - Falha 2 → aguarda 15min
+    - Falha 3+ → DESATIVA permanentemente
     
     Reduz taxa de falsos positivos (timeout/rate limit) de 11% para ~2-3%.
     """
@@ -1261,6 +1248,74 @@ def processar_produto_automatico(produto):
         logger.info(f"🔍 Plataforma detectada: {dict(produto._meta.get_field('plataforma').choices).get(plataforma_detectada, plataforma_detectada)}")
         
         dados = extrair_dados_produto(produto.link_afiliado)
+
+        # ========== PROCESSAMENTO DE CATEGORIA (antes da validação) ==========
+        # Se categoria não foi extraída, tentar fallback via keywords
+        categoria_nome = dados.get('categoria', '').strip()
+        
+        logger.info(f"📦 Categoria extraída inicialmente: '{categoria_nome}'")
+        
+        if not categoria_nome:
+            logger.info(f"⚠️ Tentando extrair categoria por fallback...")
+            titulo = dados.get('titulo', '').lower()
+            if titulo:
+                categorias_keywords = {
+                    'Eletrônicos': ['eletrônico', 'computador', 'smartphone', 'celular', 'notebook', 'tablet', 'mouse', 'teclado', 'monitor', 'headset'],
+                    'Informática': ['notebook', 'computador', 'pc', 'processador', 'placa mãe', 'memória ram', 'ssd', 'hd'],
+                    'Esportes': ['bola', 'tênis', 'espor', 'yoga', 'fitness', 'piscina', 'corrida', 'natação', 'futebol'],
+                    'Moda': ['roupa', 'calça', 'camiseta', 'jaqueta', 'sapato', 'blusa', 'vestido', 'tênis', 'mochila', 'bolsa'],
+                    'Casa': ['cama', 'mesa', 'cadeira', 'sofá', 'cortina', 'tapete', 'louça', 'geladeira'],
+                }
+                
+                for categoria_chave, keywords in categorias_keywords.items():
+                    for keyword in keywords:
+                        if keyword in titulo:
+                            categoria_nome = categoria_chave
+                            logger.info(f"✅ Categoria identificada por keyword: '{categoria_nome}'")
+                            break
+                    if categoria_nome:
+                        break
+
+        # Se ainda não encontrou categoria, deixa vazio (validação vai detectar)
+        if not categoria_nome:
+            logger.warning(f"❌ Categoria NÃO EXTRAÍDA para: {dados.get('titulo', 'SEM TÍTULO')[:50]}")
+            dados['categoria'] = ''
+        else:
+            dados['categoria'] = categoria_nome
+
+        # VALIDAÇÃO CRÍTICA: Verificar se campos obrigatórios foram extraídos
+        valido, msg_erro = _validar_campos_criticos(dados)
+        if not valido:
+            logger.warning(f"⚠️ FALHA DE VALIDAÇÃO para {produto.id}: {msg_erro}")
+            produto.status_extracao = StatusExtracao.ERRO
+            produto.erro_extracao = msg_erro
+            produto.falhas_consecutivas += 1
+            
+            logger.warning(f"⚠️ Falha #{produto.falhas_consecutivas}/2 para produto {produto.id}")
+            
+            if produto.falhas_consecutivas >= 2:
+                # DESATIVAR após 2 falhas
+                produto.ativo = False
+                produto.motivo_desativacao = (
+                    f'DESATIVADO: Falha ao extrair dados críticos após 2 tentativas. '
+                    f'Erro: {msg_erro}'
+                )
+                logger.error(f"🛑 DESATIVADO PRODUTO {produto.id} - {msg_erro}")
+            else:
+                # Aguardar próxima tentativa
+                retry_delay = get_retry_delay(produto.falhas_consecutivas)
+                proxima_tentativa = timezone.now() + retry_delay
+                produto.motivo_desativacao = (
+                    f'Falha #{produto.falhas_consecutivas}/2 - {msg_erro}. '
+                    f'Próxima tentativa: {proxima_tentativa.strftime("%Y-%m-%d %H:%M:%S")}'
+                )
+                logger.warning(f"⏱️ Agendando retry em {retry_delay}")
+            
+            produto.save(update_fields=[
+                'status_extracao', 'erro_extracao', 'falhas_consecutivas',
+                'ativo', 'motivo_desativacao'
+            ])
+            return False
 
         # Detectar se o ML redirecionou para uma página diferente
         url_final = dados.get('url_final', '')
@@ -1287,33 +1342,9 @@ def processar_produto_automatico(produto):
             logger.info(f'✅ Dados mantidos para produto redirecionado: {produto.titulo}')
             return True
 
-        # Processar categoria
+        # ===== CRIAR OBJETO CATEGORIA NA BANCO =====
         categoria_obj = None
         categoria_nome = dados.get('categoria', '').strip()
-        
-        logger.info(f"📦 Page Type: {page_type}")
-        logger.info(f"📊 Categoria extraída inicialmente: '{categoria_nome}'")
-        
-        if not categoria_nome:
-            logger.info(f"⚠️ Tentando extrair categoria por fallback...")
-            titulo = dados.get('titulo', '').lower()
-            if titulo:
-                categorias_keywords = {
-                    'Eletrônicos': ['eletrônico', 'computador', 'smartphone', 'celular', 'notebook', 'tablet'],
-                    'Informática': ['notebook', 'computador', 'pc', 'processador', 'placa mãe', 'memória ram'],
-                    'Esportes': ['bola', 'tênis', 'espor', 'yoga', 'fitness', 'piscina', 'corrida'],
-                    'Moda': ['roupa', 'calça', 'camiseta', 'jaqueta', 'sapato', 'blusa'],
-                    'Casa': ['cama', 'mesa', 'cadeira', 'sofá', 'cortina', 'tapete', 'louça'],
-                }
-                
-                for categoria_chave, keywords in categorias_keywords.items():
-                    for keyword in keywords:
-                        if keyword in titulo:
-                            categoria_nome = categoria_chave
-                            logger.info(f"✅ Categoria identificada por keyword: '{categoria_nome}'")
-                            break
-                    if categoria_nome:
-                        break
         
         if categoria_nome:
             categoria_slug = slugify(categoria_nome)
@@ -1328,12 +1359,11 @@ def processar_produto_automatico(produto):
             else:
                 logger.info(f"♻️ Categoria EXISTENTE: {categoria_nome} (ID: {categoria_obj.id})")
 
-        # Atualizar dados - SEMPRE atualizar preço se extraído (mesmo que vazio para sobrescrever)
+        # ===== ATUALIZAR PRODUTO =====
         produto.titulo = dados.get('titulo', '') or produto.titulo
         produto.imagem_url = dados.get('imagem_url', '') or produto.imagem_url
         preco_extraido = dados.get('preco', '').strip()
-        if preco_extraido:
-            produto.preco = preco_extraido  # Só atualiza se não estiver vazio
+        produto.preco = preco_extraido  # SEMPRE atualiza, mesmo que vazio
         produto.preco_original = dados.get('preco_original', '') or produto.preco_original
         produto.descricao = dados.get('descricao', '') or produto.descricao
         produto.url_final = dados.get('url_final', '') or produto.url_final
@@ -1343,8 +1373,7 @@ def processar_produto_automatico(produto):
             produto.categoria = categoria_obj
             logger.info(f"✅ Categoria ATRIBUÍDA: {produto.titulo[:50]}... → {categoria_obj.nome}")
         else:
-            # Se não encontrou categoria mas tinha uma antes, não sobrescreve
-            logger.info(f"ℹ️ Sem categoria extraída para: {produto.titulo[:50] if produto.titulo else 'SEM TÍTULO'}")
+            logger.info(f"ℹ️ Sem categoria para: {produto.titulo[:50] if produto.titulo else 'SEM TÍTULO'}")
         
         produto.status_extracao = StatusExtracao.SUCESSO
         produto.ultima_extracao = timezone.now()
@@ -1363,34 +1392,34 @@ def processar_produto_automatico(produto):
         produto.status_extracao = StatusExtracao.ERRO
         produto.erro_extracao = str(e)
         
-        # ❌ ERRO - Incrementar falhas e agendar retry com backoff
+        # ❌ ERRO - Incrementar falhas e contar tentativas (máx 2)
         produto.falhas_consecutivas += 1
-        logger.warning(f"⚠️ Falha #{produto.falhas_consecutivas}/{LIMITE_FALHAS} para produto {produto.id}")
+        logger.warning(f"⚠️ Falha #{produto.falhas_consecutivas}/2 para produto {produto.id}: {str(e)[:80]}")
         
-        # Agendar próxima tentativa com delay se não atingiu limite
-        if produto.falhas_consecutivas < LIMITE_FALHAS:
+        # Após 2 falhas → DESATIVAR
+        if produto.falhas_consecutivas >= 2:
+            produto.ativo = False
+            produto.motivo_desativacao = (
+                f'DESATIVADO: Falha na extração após 2 tentativas. '
+                f'Última tentativa em {timezone.now()}. '
+                f'Erro: {str(e)[:150]}'
+            )
+            logger.error(
+                f"🛑 DESATIVADO PRODUTO {produto.id} após 2 falhas: "
+                f"{produto.titulo[:50] if produto.titulo else 'SEM TÍTULO'}... - {str(e)[:100]}"
+            )
+        else:
+            # Agendar retry
             retry_delay = get_retry_delay(produto.falhas_consecutivas)
             proxima_tentativa = timezone.now() + retry_delay
             produto.motivo_desativacao = (
-                f'Falha #{produto.falhas_consecutivas}/{LIMITE_FALHAS}. '
+                f'Falha #{produto.falhas_consecutivas}/2. '
                 f'Próxima tentativa agendada para {proxima_tentativa.strftime("%Y-%m-%d %H:%M:%S")}. '
                 f'Erro: {str(e)[:150]}'
             )
             logger.warning(
                 f"⏱️ Próxima tentativa agendada em {retry_delay} "
                 f"para produto {produto.id}: {produto.titulo[:30] if produto.titulo else 'N/A'}..."
-            )
-        else:
-            # 🛑 Atingiu limite - desativar permanentemente
-            produto.ativo = False
-            produto.motivo_desativacao = (
-                f'Desativado após {LIMITE_FALHAS} falhas consecutivas. '
-                f'Última tentativa: {timezone.now()}. '
-                f'Erro: {str(e)[:150]}'
-            )
-            logger.error(
-                f"🛑 DESATIVADO PRODUTO {produto.id} após {LIMITE_FALHAS} falhas: "
-                f"{produto.titulo[:50] if produto.titulo else 'N/A'}..."
             )
         
         produto.save(update_fields=[

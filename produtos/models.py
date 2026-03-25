@@ -24,87 +24,13 @@ class Categoria(models.Model):
         return self.nome
 
 
-class Produto(models.Model):
-    """Produto com link afiliado do Mercado Livre."""
-    titulo = models.CharField(
-        max_length=255,
-        verbose_name="Título",
-        help_text="Nome do produto exibido no site"
-    )
-    imagem_url = models.URLField(
-        max_length=500,
-        blank=True,
-        null=True,
-        verbose_name="URL da Imagem",
-        help_text="Link externo da imagem do produto"
-    )
-    imagem = models.ImageField(
-        upload_to='produtos/%Y/%m/',
-        blank=True,
-        null=True,
-        verbose_name="Imagem (Upload)",
-        help_text="Ou faça upload de uma imagem local"
-    )
-    link_afiliado = models.URLField(
-        max_length=500,
-        verbose_name="Link Afiliado",
-        help_text="Link de afiliado do Mercado Livre"
-    )
-    preco = models.CharField(
-        max_length=50,
-        blank=True,
-        null=True,
-        verbose_name="Preço",
-        help_text="Ex: R$ 99,90 ou 'A partir de R$ 49,90'"
-    )
-    preco_original = models.CharField(
-        max_length=50,
-        blank=True,
-        null=True,
-        verbose_name="Preço Original",
-        help_text="Preço antes do desconto (riscado). Ex: R$ 149,90"
-    )
-    categoria = models.ForeignKey(
-        Categoria,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='produtos',
-        verbose_name="Categoria"
-    )
-    destaque = models.BooleanField(
-        default=False,
-        verbose_name="Destaque",
-        help_text="Produtos em destaque aparecem primeiro"
-    )
-    ativo = models.BooleanField(
-        default=True,
-        verbose_name="Ativo",
-        help_text="Apenas produtos ativos são exibidos no site"
-    )
-    ordem = models.IntegerField(
-        default=0,
-        verbose_name="Ordem",
-        help_text="Ordem de exibição (menor = primeiro)"
-    )
-    criado_em = models.DateTimeField(auto_now_add=True, verbose_name="Criado em")
-    atualizado_em = models.DateTimeField(auto_now=True, verbose_name="Atualizado em")
-
-    class Meta:
-        verbose_name = "Produto"
-        verbose_name_plural = "Produtos"
-        ordering = ['-destaque', 'ordem', '-criado_em']
-
-    def get_imagem(self):
-        """Retorna a URL da imagem (upload ou URL externa)."""
-        if self.imagem and hasattr(self.imagem, 'url'):
-            return self.imagem.url
-        elif self.imagem_url:
-            return self.imagem_url
-        return '/static/images/no-image.png'
-
-    def __str__(self):
-        return self.titulo
+# ============================================================
+# ARQUITETURA DE PRODUTOS - Unificado
+# ============================================================
+# Nota: O modelo "Produto" simples (origem manual) foi consolidado em ProdutoAutomatico.
+# Agora há um único modelo com proxy models para diferentes interfaces:
+# - ProdutoAutomaticoProxy: Para criar via link (extração automática)
+# - ProdutoManualProxy: Para criar manualmente ou editar dados extraídos
 
 
 class PosicaoAnuncio(models.TextChoices):
@@ -167,14 +93,35 @@ class StatusExtracao(models.TextChoices):
     ERRO = 'erro', 'Erro na Extração'
 
 
+class OrigemProduto(models.TextChoices):
+    """Indica a origem da criação do produto."""
+    AUTOMATICO = 'automatico', 'Extraído Automaticamente'
+    MANUAL = 'manual', 'Criado Manualmente'
+
+
 class ProdutoAutomatico(models.Model):
-    """Produto com dados extraídos automaticamente de múltiplas plataformas.
-    O utilizador cadastra apenas o link afiliado e o sistema extrai
-    título, imagem, preço e descrição automaticamente."""
+    """Modelo unificado de Produto com suporte a extração automática e edição manual.
+    
+    Pode ser criado/editado de duas formas:
+    1. AUTOMÁTICO (via link): Sistema extrai automaticamente título, imagem, preço
+    2. MANUAL: Usuário cria/edita manualmente (pode ter link ou não)
+    
+    Usa proxy models para diferentes interfaces de admin:
+    - ProdutoAutomatico: Interface para criar/atualizar via link (extração)
+    - ProdutoManual: Interface para criar/editar manualmente (campos editáveis)
+    """
+    origem = models.CharField(
+        max_length=20,
+        choices=OrigemProduto.choices,
+        default=OrigemProduto.AUTOMATICO,
+        verbose_name="Origem",
+        help_text="Indica se foi extraído automaticamente ou criado manualmente",
+        db_index=True
+    )
     link_afiliado = models.URLField(
-        max_length=500,
+        max_length=3000,
         verbose_name="Link Afiliado",
-        help_text="Cole o link do produto (Mercado Livre, Amazon, Shopee, Shein, etc)"
+        help_text="Cole o link do produto (Mercado Livre, Amazon, Shopee, Shein, etc) ou deixe em branco para manual"
     )
     # Plataforma detectada
     plataforma = models.CharField(
@@ -192,7 +139,7 @@ class ProdutoAutomatico(models.Model):
         help_text="Extraído automaticamente"
     )
     imagem_url = models.URLField(
-        max_length=500,
+        max_length=3000,
         blank=True,
         verbose_name="URL da Imagem",
         help_text="Extraída automaticamente"
@@ -215,7 +162,7 @@ class ProdutoAutomatico(models.Model):
         help_text="Extraída automaticamente"
     )
     url_final = models.URLField(
-        max_length=500,
+        max_length=3000,
         blank=True,
         verbose_name="URL Final do Produto",
         help_text="URL real do produto após redirecionamentos"
@@ -290,7 +237,49 @@ class ProdutoAutomatico(models.Model):
         return self.imagem_url or '/static/images/no-image.png'
 
     def __str__(self):
-        return self.titulo or f"Produto (link: {self.link_afiliado[:50]}...)"
+        return self.titulo or f"Produto (link: {self.link_afiliado[:50] if self.link_afiliado else 'manual'}...)"
+
+
+# ============================================================
+# PROXY MODELS - Diferentes interfaces de admin
+# ============================================================
+
+class ProdutoAutomaticoProxy(ProdutoAutomatico):
+    """Proxy model para interface de extração automática.
+    
+    Ao criar/editar nesta interface:
+    - Link é obrigatório
+    - Título, imagem, preço são readonly (extraídos automaticamente)
+    - origem = AUTOMATICO
+    """
+    class Meta:
+        proxy = True
+        verbose_name = "Produto Automático"
+        verbose_name_plural = "Produtos Automáticos"
+        ordering = ['-destaque', 'ordem', '-criado_em']
+
+
+class ProdutoManualProxy(ProdutoAutomatico):
+    """Proxy model para interface de criação/edição manual.
+    
+    Ao criar/editar nesta interface:
+    - Todos os campos são editáveis
+    - Link é opcional (pode ser preenchido depois para extração)
+    - origem = MANUAL
+    - Permite ajustar dados extraídos automaticamente
+    """
+    class Meta:
+        proxy = True
+        verbose_name = "Produto Manual"
+        verbose_name_plural = "Produtos Manuais"
+        ordering = ['-destaque', 'ordem', '-criado_em']
+
+
+# ============================================================
+# COMPATIBILIDADE - Remover classe antiga Produto
+# ============================================================
+# Nota: O modelo "Produto" simples foi consolidado em ProdutoAutomatico.
+# As migrations vão migrar dados se houver.
 
 
 class DiaSemana(models.TextChoices):

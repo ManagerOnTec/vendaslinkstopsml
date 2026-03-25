@@ -2,7 +2,8 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.contrib import messages
 from .models import (
-    Produto, Categoria, Anuncio, ProdutoAutomatico,
+    Categoria, Anuncio, ProdutoAutomatico, 
+    ProdutoAutomaticoProxy, ProdutoManualProxy,
     AgendamentoAtualizacao, LogAtualizacao, DocumentoLegal, EscalonamentoConfig
 )
 
@@ -15,60 +16,6 @@ class CategoriaAdmin(admin.ModelAdmin):
     list_editable = ('ativo', 'ordem')
     prepopulated_fields = {'slug': ('nome',)}
     ordering = ('ordem', 'nome')
-
-
-@admin.register(Produto)
-class ProdutoAdmin(admin.ModelAdmin):
-    list_display = (
-        'titulo', 'preview_imagem', 'preco', 'categoria',
-        'destaque', 'ativo', 'ordem', 'criado_em'
-    )
-    list_filter = ('ativo', 'destaque', 'categoria')
-    search_fields = ('titulo',)
-    list_editable = ('destaque', 'ativo', 'ordem')
-    list_per_page = 25
-    ordering = ('-destaque', 'ordem', '-criado_em')
-    readonly_fields = ('preview_imagem_grande', 'criado_em', 'atualizado_em')
-
-    fieldsets = (
-        ('Informações do Produto', {
-            'fields': ('titulo', 'categoria', 'preco', 'preco_original')
-        }),
-        ('Imagem', {
-            'fields': ('imagem', 'imagem_url', 'preview_imagem_grande'),
-            'description': 'Use upload OU URL externa. O upload tem prioridade.'
-        }),
-        ('Link Afiliado', {
-            'fields': ('link_afiliado',)
-        }),
-        ('Exibição', {
-            'fields': ('destaque', 'ativo', 'ordem')
-        }),
-        ('Datas', {
-            'fields': ('criado_em', 'atualizado_em'),
-            'classes': ('collapse',)
-        }),
-    )
-
-    def preview_imagem(self, obj):
-        url = obj.get_imagem()
-        if url:
-            return format_html(
-                '<img src="{}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;" />',
-                url
-            )
-        return '-'
-    preview_imagem.short_description = 'Imagem'
-
-    def preview_imagem_grande(self, obj):
-        url = obj.get_imagem()
-        if url:
-            return format_html(
-                '<img src="{}" style="max-width:300px;max-height:300px;object-fit:contain;border-radius:8px;" />',
-                url
-            )
-        return 'Nenhuma imagem'
-    preview_imagem_grande.short_description = 'Preview'
 
 
 @admin.register(Anuncio)
@@ -93,8 +40,14 @@ class AnuncioAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(ProdutoAutomatico)
-class ProdutoAutomaticoAdmin(admin.ModelAdmin):
+@admin.register(ProdutoAutomaticoProxy)
+class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
+    """Interface para criar/atualizar produtos via extração automática de link.
+    
+    - Links são obrigatórios
+    - Título, imagem, preço são readonly (extraídos automaticamente)
+    - Sistema executa extração ao salvar
+    """
     list_display = (
         'titulo_display', 'plataforma_badge', 'preview_imagem', 'preco', 'status_badge',
         'falhas_consecutivas', 'categoria', 'destaque', 'ativo', 'ordem', 'criado_em'
@@ -105,7 +58,7 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
     list_per_page = 25
     ordering = ('-destaque', 'ordem', '-criado_em')
     readonly_fields = (
-        'plataforma', 'titulo', 'imagem_url', 'preco', 'preco_original', 'descricao',
+        'origem', 'plataforma', 'titulo', 'imagem_url', 'preco', 'preco_original', 'descricao',
         'url_final', 'status_extracao', 'erro_extracao',
         'preview_imagem_grande', 'criado_em', 'atualizado_em', 'ultima_extracao',
         'falhas_consecutivas', 'motivo_desativacao'
@@ -114,7 +67,7 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Link do Produto (COLE AQUI)', {
-            'fields': ('link_afiliado', 'plataforma'),
+            'fields': ('link_afiliado', 'plataforma', 'origem'),
             'description': (
                 '<strong style="font-size:14px;color:#1a73e8;">'
                 'Cole o link do produto (Mercado Livre, Amazon, Shopee, Shein). '
@@ -127,7 +80,7 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
                 'preco', 'preco_original', 'descricao', 'url_final'
             ),
             'classes': ('collapse',),
-            'description': 'Estes campos são preenchidos automaticamente pelo sistema.'
+            'description': 'Estes campos são preenchidos automaticamente pelo sistema. Para editar, use a interface de Produtos Manuais.'
         }),
         ('Configuração Manual', {
             'fields': ('categoria', 'destaque', 'ativo', 'ordem')
@@ -138,13 +91,19 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
         }),
         ('Monitoramento de Falhas', {
             'fields': ('falhas_consecutivas', 'motivo_desativacao'),
-            'description': 'Produto é desativado automaticamente após 2 falhas consecutivas'
+            'description': 'Produto é desativado automaticamente após falhas consecutivas'
         }),
         ('Datas', {
             'fields': ('criado_em', 'atualizado_em'),
             'classes': ('collapse',)
         }),
     )
+
+    def get_queryset(self, request):
+        """Filtrar apenas produtos de origem AUTOMÁTICA para esta interface."""
+        from .models import OrigemProduto
+        qs = super().get_queryset(request)
+        return qs.filter(origem=OrigemProduto.AUTOMATICO)
 
     def titulo_display(self, obj):
         titulo = obj.titulo or '(Aguardando extração...)'
@@ -217,11 +176,12 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
     status_badge.short_description = 'Status'
 
     def save_model(self, request, obj, form, change):
-        """Ao salvar, SEMPRE tentar extrair dados do link.
+        """Ao salvar, marcara origem como AUTOMÁTICO e extrai dados do link."""
+        from .models import OrigemProduto
         
-        Se link é novo ou mudou, extrai automaticamente.
-        Se link não mudou mas salvou novamente, também extrai (conta tentativas).
-        """
+        # Sempre marcar como automático nesta interface
+        obj.origem = OrigemProduto.AUTOMATICO
+        
         is_new = not obj.pk
         link_changed = False
 
@@ -235,7 +195,6 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
         # SEMPRE chamar para contar as tentativas
-        # (não apenas quando link muda)
         if is_new or link_changed or True:  # ← Sempre executa
             from .scraper import processar_produto_automatico
             success = processar_produto_automatico(obj)
@@ -267,10 +226,7 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
 
     @admin.action(description='Extrair/Atualizar dados (Genérico - todas as plataformas)')
     def extrair_dados_action(self, request, queryset):
-        """
-        Extrai dados de todos os produtos selecionados (ML, Amazon, Shopee, Shein, etc).
-        Processamento assíncrono para evitar bloqueios com múltiplas plataformas.
-        """
+        """Extrai dados de todos os produtos selecionados."""
         from .scraper import processar_produto_automatico
         from .task_queue import queue_batch_tasks
         
@@ -280,7 +236,6 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
             messages.warning(request, 'Nenhum produto selecionado.')
             return
         
-        # Adicionar tarefas à fila para processamento assíncrono
         queue_batch_tasks(processar_produto_automatico, list(queryset))
         
         messages.success(
@@ -291,19 +246,13 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
 
     @admin.action(description='Re-extrair dados (forçar atualização - todas as plataformas)')
     def reextrair_dados_action(self, request, queryset):
-        """
-        Força re-extração de dados, resetando status para PROCESSANDO.
-        """
+        """Força re-extração de dados, resetando status para PROCESSANDO."""
         from .models import StatusExtracao
         from .task_queue import queue_batch_tasks
         from .scraper import processar_produto_automatico
         
-        # Resetar status para forçar re-extração
         queryset.update(status_extracao=StatusExtracao.PROCESSANDO)
-        
         count = queryset.count()
-        
-        # Enfileirar para processamento assíncrono
         queue_batch_tasks(processar_produto_automatico, list(queryset))
         
         messages.success(
@@ -314,18 +263,123 @@ class ProdutoAutomaticoAdmin(admin.ModelAdmin):
     
     @admin.action(description='Resetar contador de falhas e reativar')
     def resetar_falhas_action(self, request, queryset):
-        """
-        Reseta contador de falhas e reativa produtos (todas as plataformas).
-        """
+        """Reseta contador de falhas e reativa produtos."""
         atualizado = queryset.update(
             falhas_consecutivas=0,
             motivo_desativacao='',
-            ativo=True  # Reativar produtos desativados
+            ativo=True
         )
         messages.success(
             request,
             f'✅ {atualizado} produto(s) reativado(s) e contador de falhas resetado.'
         )
+
+
+@admin.register(ProdutoManualProxy)
+class ProdutoManualProxyAdmin(admin.ModelAdmin):
+    """Interface para criar/editar produtos manualmente.
+    
+    - Todos os campos são editáveis
+    - Link é opcional (pode ser preenchido depois para extração)
+    - Ideal para ajustar dados ou criar produtos sem link
+    """
+    list_display = (
+        'titulo', 'preview_imagem', 'preco', 'categoria',
+        'origem_badge', 'destaque', 'ativo', 'ordem', 'criado_em'
+    )
+    list_filter = ('ativo', 'destaque', 'categoria')
+    search_fields = ('titulo', 'link_afiliado')
+    list_editable = ('destaque', 'ativo', 'ordem')
+    list_per_page = 25
+    ordering = ('-destaque', 'ordem', '-criado_em')
+    readonly_fields = ('preview_imagem_grande', 'criado_em', 'atualizado_em', 'origem')
+
+    fieldsets = (
+        ('Informações do Produto', {
+            'fields': ('titulo', 'categoria', 'preco', 'preco_original', 'origem'),
+            'description': 'Preencha manualmente os dados do produto. Deixe "Link Afiliado" em branco se não tiver.'
+        }),
+        ('Imagem', {
+            'fields': ('imagem_url', 'preview_imagem_grande'),
+            'description': 'Cole a URL da imagem do produto. A URL tem prioridade.'
+        }),
+        ('Link Afiliado (Opcional)', {
+            'fields': ('link_afiliado',),
+            'description': 'Se preencher o link, você pode usar "Sincronizar com Automático" para extrair dados. Deixe em branco se for manual.'
+        }),
+        ('Descrição e URL Final', {
+            'fields': ('descricao', 'url_final'),
+            'classes': ('collapse',),
+            'description': 'Campos opcionais para dados adicionais'
+        }),
+        ('Exibição', {
+            'fields': ('destaque', 'ativo', 'ordem')
+        }),
+        ('Datas', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def get_queryset(self, request):
+        """Mostrar produtos manuais E automáticos para poder editar tudo manualmente."""
+        qs = super().get_queryset(request)
+        # Não filtrar por origem - mostrar tudo para permitir edição manual
+        return qs
+
+    def preview_imagem(self, obj):
+        url = obj.get_imagem()
+        if url and url != '/static/images/no-image.png':
+            return format_html(
+                '<img src="{}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;" />',
+                url
+            )
+        return '-'
+    preview_imagem.short_description = 'Imagem'
+
+    def preview_imagem_grande(self, obj):
+        url = obj.get_imagem()
+        if url and url != '/static/images/no-image.png':
+            return format_html(
+                '<img src="{}" style="max-width:300px;max-height:300px;object-fit:contain;border-radius:8px;" />',
+                url
+            )
+        return 'Nenhuma imagem'
+    preview_imagem_grande.short_description = 'Preview'
+
+    def origem_badge(self, obj):
+        """Exibe a origem do produto."""
+        return format_html(
+            '<span style="background:#607D8B;color:white;padding:3px 8px;'
+            'border-radius:10px;font-size:11px;font-weight:bold;">{}</span>',
+            obj.get_origem_display()
+        )
+    origem_badge.short_description = 'Origem'
+
+    def save_model(self, request, obj, form, change):
+        """Ao salvar, marca origem como MANUAL apenas se for novo produto."""
+        from .models import OrigemProduto
+        
+        # Se é novo produto, marcar como MANUAL
+        if not change:
+            obj.origem = OrigemProduto.MANUAL
+        # Se é existente, PRESERVAR a origem (não mudar)
+        
+        super().save_model(request, obj, form, change)
+        
+        # Mostrar mensagem diferenciada
+        if change:
+            messages.success(
+                request,
+                f'✅ Produto "{obj.titulo}" atualizado com sucesso. '
+                f'Origem preservada como {obj.get_origem_display().lower()}.'
+            )
+        else:
+            messages.success(
+                request,
+                f'✅ Novo produto manual "{obj.titulo}" criado com sucesso. '
+                f'Você pode preencher o link depois e sincronizar com extração automática.'
+            )
 
 
 # ============================================================
