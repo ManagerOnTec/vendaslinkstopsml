@@ -1,0 +1,299 @@
+{% extends 'admin/base_site.html' %}
+{% load static %}
+
+{% block title %}Importar Múltiplos Produtos - {{ block.super }}{% endblock %}
+
+{% block extrahead %}
+<style>
+    .importar-container {
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 30px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .importar-container h1 {
+        color: #333;
+        margin-bottom: 30px;
+        font-size: 28px;
+    }
+
+    .upload-area {
+        border: 2px dashed #1a73e8;
+        border-radius: 8px;
+        padding: 40px;
+        text-align: center;
+        background: #f0f7ff;
+        margin: 20px 0;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .upload-area:hover {
+        background: #e3f2fd;
+        border-color: #1565c0;
+    }
+
+    .upload-area.active {
+        background: #e3f2fd;
+        border-color: #1565c0;
+    }
+
+    .upload-area input[type="file"] {
+        display: none;
+    }
+
+    .upload-icon {
+        font-size: 48px;
+        margin-bottom: 10px;
+    }
+
+    .upload-text {
+        color: #1a73e8;
+        font-weight: 500;
+        margin: 10px 0;
+    }
+
+    .upload-hint {
+        color: #666;
+        font-size: 13px;
+        margin-top: 10px;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+        font-weight: 500;
+        font-size: 14px;
+    }
+
+    .form-group input[type="checkbox"] {
+        margin-right: 8px;
+    }
+
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+    }
+
+    .form-group .help-text {
+        display: block;
+        margin-top: 5px;
+        color: #666;
+        font-size: 12px;
+    }
+
+    .button-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 30px;
+    }
+
+    .button-group button {
+        flex: 1;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+        background: #1a73e8;
+        color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        background: #1565c0;
+    }
+
+    .btn-primary:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+
+    .btn-secondary {
+        background: #f0f0f0;
+        color: #333;
+    }
+
+    .btn-secondary:hover {
+        background: #e0e0e0;
+    }
+
+    .info-box {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        padding: 15px;
+        margin-bottom: 20px;
+        color: #856404;
+    }
+
+    .info-box strong {
+        color: #664d03;
+    }
+
+    .example-box {
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+        margin-top: 20px;
+        font-family: monospace;
+        font-size: 12px;
+        color: #333;
+    }
+
+    .example-box strong {
+        display: block;
+        margin-bottom: 10px;
+        color: #1a73e8;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="importar-container">
+    <h1>📥 Importar Múltiplos Produtos</h1>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="messagelist">
+                <div class="{% if message.tags %}{{ message.tags }}{% endif %}">
+                    {{ message }}
+                </div>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="info-box">
+        <strong>💡 Como usar:</strong>
+        <ul style="margin: 10px 0 0 20px;">
+            <li>Prepare um arquivo .txt com um link por linha</li>
+            <li>Suporta: Mercado Livre, Amazon, Shopee, Shein e outros</li>
+            <li>Linhas vazias e comentários (#) serão ignorados</li>
+            <li>Links duplicados serão pulados automaticamente</li>
+        </ul>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" id="import-form">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label for="id_arquivo">Selecione o arquivo .txt</label>
+            <div class="upload-area" onclick="document.getElementById('id_arquivo').click()">
+                <div class="upload-icon">📄</div>
+                <div class="upload-text">Clique para selecionar arquivo</div>
+                <div class="upload-hint">ou arraste e solte aqui</div>
+                <input type="file" id="id_arquivo" name="arquivo" accept=".txt" required>
+            </div>
+            <div id="file-info" style="margin-top: 10px; color: #666; font-size: 12px;"></div>
+            {% if form.arquivo.errors %}
+                <div style="color: #d32f2f; margin-top: 5px;">
+                    {% for error in form.arquivo.errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" name="processar_imediatamente" value="on" checked>
+                <span>Processar imediatamente (extrair dados)</span>
+            </label>
+            <span class="help-text">
+                ✓ Recomendado: Iniciará a extração automática de dados para cada produto
+            </span>
+        </div>
+
+        <div class="example-box">
+            <strong>📋 Exemplo de arquivo .txt:</strong>
+            # Mercado Livre<br>
+            https://meli.la/273MJsp<br>
+            https://meli.la/1SVtJXN<br>
+            <br>
+            # Amazon<br>
+            https://amzn.to/4rUvurh<br>
+            https://amzn.to/47j1i1M<br>
+            <br>
+            # Shopee<br>
+            https://s.shopee.com.br/9fGRPwrmXo<br>
+            https://s.shopee.com.br/9pZrcFr9Cr
+        </div>
+
+        <div class="button-group">
+            <button type="submit" class="btn-primary">✅ Importar e Processar</button>
+            <a href="{% url 'admin:produtos_produtoautomaticoproxy_changelist' %}" class="btn-secondary" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">← Voltar</a>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Mostrar nome do arquivo selecionado
+    document.getElementById('id_arquivo').addEventListener('change', function(e) {
+        const fileInfo = document.getElementById('file-info');
+        if (this.files.length > 0) {
+            const file = this.files[0];
+            const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+            fileInfo.textContent = `✓ Arquivo selecionado: ${file.name} (${sizeMB} MB)`;
+        }
+    });
+
+    // Drag and drop
+    const uploadArea = document.querySelector('.upload-area');
+    
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, () => {
+            uploadArea.classList.add('active');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, () => {
+            uploadArea.classList.remove('active');
+        });
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        document.getElementById('id_arquivo').files = files;
+        
+        // Disparar change event
+        const event = new Event('change', { bubbles: true });
+        document.getElementById('id_arquivo').dispatchEvent(event);
+    });
+
+    // Desabilitar botão se não houver arquivo
+    const submitBtn = document.querySelector('button[type="submit"]');
+    const fileInput = document.getElementById('id_arquivo');
+    
+    function updateButtonState() {
+        submitBtn.disabled = !fileInput.files.length;
+    }
+    
+    fileInput.addEventListener('change', updateButtonState);
+    updateButtonState();
+</script>
+{% endblock %}

@@ -64,6 +64,7 @@ def _enforce_rate_limit():
 
 
 
+
 def _melhorar_url_imagem(url: str) -> str:
     """
     Converte URL de thumbnail do ML para alta resolução.
@@ -75,10 +76,12 @@ def _melhorar_url_imagem(url: str) -> str:
     """
     if not url:
         return url
+    
     # Trocar sufixo de thumbnail para full size
     for suffix in ['-T.webp', '-T.jpg', '-T.png']:
         if suffix in url:
             url = url.replace(suffix, suffix.replace('-T', '-F'))
+    
     return url
 
 
@@ -507,19 +510,40 @@ async def _extrair_dados_ml(url: str) -> dict:
                         ? h1.textContent.trim()
                         : (getMeta('og:title') || document.title || '');
 
-                    // IMAGEM - Priorizar galeria do produto
-                    const galleryFig = document.querySelector(
-                        '.ui-pdp-gallery__figure img'
+                    // IMAGEM - Priorizar galeria do produto (sem badges/watermarks)
+                    // 1) Tentar galeria carrossel (geralmente tem imagens limpas)
+                    const galleryImgs = document.querySelectorAll(
+                        '.ui-pdp-gallery__figure img, .ui-pdp-image__container img'
                     );
-                    if (galleryFig) {
-                        imgSrc = galleryFig.getAttribute('data-zoom')
-                            || galleryFig.src || '';
+                    
+                    if (galleryImgs.length > 0) {
+                        // Preferir a primeira imagem real (sem badges)
+                        for (const img of galleryImgs) {
+                            const src = img.getAttribute('data-zoom') || img.src || '';
+                            if (src && src.includes('mlstatic')) {
+                                imgSrc = src;
+                                break;  // Pega a primeira de boa qualidade
+                            }
+                        }
                     }
-                    // Fallback: og:image
+                    
+                    // 2) Fallback: tentar figura específica com data-zoom
+                    if (!imgSrc) {
+                        const galleryFig = document.querySelector(
+                            '.ui-pdp-gallery__figure img'
+                        );
+                        if (galleryFig) {
+                            imgSrc = galleryFig.getAttribute('data-zoom')
+                                || galleryFig.src || '';
+                        }
+                    }
+                    
+                    // 3) Fallback: og:image (pode ter watermark)
                     if (!imgSrc) {
                         imgSrc = getMeta('og:image') || '';
                     }
-                    // Último recurso: busca inteligente
+                    
+                    // 4) Último recurso: busca inteligente
                     if (!imgSrc) {
                         imgSrc = findProductImage(
                             document.querySelector('.ui-pdp-container__row')

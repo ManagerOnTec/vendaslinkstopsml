@@ -49,8 +49,8 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
     - Sistema executa extração ao salvar
     """
     list_display = (
-        'titulo_display', 'plataforma_badge', 'preview_imagem', 'preco', 'status_badge',
-        'falhas_consecutivas', 'categoria', 'destaque', 'ativo', 'ordem', 'criado_em'
+        'titulo_display', 'plataforma_badge', 'preview_imagem', 'categoria_display', 'preco', 'status_badge',
+        'falhas_consecutivas', 'destaque', 'ativo', 'ordem', 'criado_em'
     )
     list_filter = ('plataforma', 'status_extracao', 'ativo', 'destaque', 'categoria', 'falhas_consecutivas')
     search_fields = ('titulo', 'link_afiliado')
@@ -63,7 +63,7 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
         'preview_imagem_grande', 'criado_em', 'atualizado_em', 'ultima_extracao',
         'falhas_consecutivas', 'motivo_desativacao'
     )
-    actions = ['extrair_dados_action', 'reextrair_dados_action', 'resetar_falhas_action']
+    actions = ['extrair_dados_action', 'reextrair_dados_action', 'resetar_falhas_action', 'importar_produtos_arquivo_action']
 
     fieldsets = (
         ('Link do Produto (COLE AQUI)', {
@@ -80,10 +80,11 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
                 'preco', 'preco_original', 'descricao', 'url_final'
             ),
             'classes': ('collapse',),
-            'description': 'Estes campos são preenchidos automaticamente pelo sistema. Para editar, use a interface de Produtos Manuais.'
+            'description': 'Estes campos são preenchidos automaticamente pelo scraper. Para editar, veja a seção "Configuração Manual".'
         }),
         ('Configuração Manual', {
-            'fields': ('categoria', 'destaque', 'ativo', 'ordem')
+            'fields': ('categoria', 'destaque', 'ativo', 'ordem'),
+            'description': 'Categoria é extraída automaticamente mas pode ser alterada aqui se necessário.'
         }),
         ('Status da Extração', {
             'fields': ('status_extracao', 'erro_extracao', 'ultima_extracao'),
@@ -174,6 +175,20 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
             color, obj.get_status_extracao_display()
         )
     status_badge.short_description = 'Status'
+
+    def categoria_display(self, obj):
+        """Exibe a categoria extraída automaticamente."""
+        if obj.categoria:
+            return format_html(
+                '<span style="background:#673AB7;color:white;padding:3px 8px;'
+                'border-radius:10px;font-size:11px;font-weight:bold;">📁 {}</span>',
+                obj.categoria.nome
+            )
+        return format_html(
+            '<span style="background:#999;color:white;padding:3px 8px;'
+            'border-radius:10px;font-size:11px;font-weight:bold;">❌ Não extraída</span>'
+        )
+    categoria_display.short_description = 'Categoria'
 
     def save_model(self, request, obj, form, change):
         """Ao salvar, marcara origem como AUTOMÁTICO e extrai dados do link."""
@@ -273,6 +288,115 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
             request,
             f'✅ {atualizado} produto(s) reativado(s) e contador de falhas resetado.'
         )
+
+    @admin.action(description='📥 Importar múltiplos produtos via arquivo .txt')
+    def importar_produtos_arquivo_action(self, request, queryset):
+        """Abre formulário para importar múltiplos produtos via arquivo com vários links."""
+        from django.urls import reverse
+        from django.http import HttpResponseRedirect
+        
+        # Construir URL customizada de importação
+        # A URL é registrada em get_urls() com nome 'importar_produtos_arquivo'
+        # Django auto-prefixo o namespace do admin, então precisamos construir manualmente
+        app_label = self.model._meta.app_label
+        model_name = self.model._meta.model_name
+        url_name = f'admin:{app_label}_{model_name}_importar_produtos_arquivo'
+        
+        try:
+            url = reverse(url_name)
+        except:
+            # Fallback: construir URL manualmente
+            url = f'/admin/{app_label}/{model_name}/importar-arquivo/'
+        
+        return HttpResponseRedirect(url)
+
+    def get_urls(self):
+        """Adicionar URL customizada para importação de arquivo."""
+        from django.urls import path
+        urls = super().get_urls()
+        app_label = self.model._meta.app_label
+        model_name = self.model._meta.model_name
+        custom_urls = [
+            path('importar-arquivo/', self.admin_site.admin_view(self.processar_importacao_arquivo), 
+                 name=f'{app_label}_{model_name}_importar_produtos_arquivo'),
+        ]
+        return custom_urls + urls
+
+    def processar_importacao_arquivo(self, request):
+        """View para processar upload de arquivo .txt com múltiplos links."""
+        from django.shortcuts import render
+        from .forms import ImportarProdutosForm
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+        
+        if request.method == 'POST':
+            form = ImportarProdutosForm(request.POST, request.FILES)
+            if form.is_valid():
+                try:
+                    links = form.processar_arquivo()
+                    processar_imediatamente = form.cleaned_data.get('processar_imediatamente', False)
+                    
+                    # Criar produtos para cada link
+                    produtos_criados = []
+                    produtos_duplicados = []
+                    
+                    from .models import OrigemProduto
+                    from .scraper import processar_produto_automatico
+                    from .task_queue import queue_batch_tasks
+                    
+                    for link in links:
+                        # Verificar se já existe
+                        existente = ProdutoAutomatico.objects.filter(link_afiliado=link).exists()
+                        if existente:
+                            produtos_duplicados.append(link)
+                            continue
+                        
+                        # Criar novo produto
+                        produto = ProdutoAutomatico.objects.create(
+                            link_afiliado=link,
+                            origem=OrigemProduto.AUTOMATICO,
+                            ativo=True
+                        )
+                        produtos_criados.append(produto)
+                    
+                    # Processar produtos se solicitado
+                    if processar_imediatamente and produtos_criados:
+                        queue_batch_tasks(processar_produto_automatico, produtos_criados)
+                        messages.success(
+                            request,
+                            f'✅ {len(produtos_criados)} produto(s) criado(s) e enfileirado(s) para '
+                            f'extração automática em background (por plataforma: ML, Amazon, Shopee, Shein). '
+                            f'Processamento em andamento...'
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            f'✅ {len(produtos_criados)} produto(s) criado(s) com sucesso. '
+                            f'Execute a ação "Extrair dados" para processar.'
+                        )
+                    
+                    if produtos_duplicados:
+                        messages.warning(
+                            request,
+                            f'⚠️ {len(produtos_duplicados)} link(s) já existente(s) e foi(ram) ignorado(s).'
+                        )
+                    
+                    # Redirecionar para listagem
+                    return HttpResponseRedirect(reverse('admin:produtos_produtoautomaticoproxy_changelist'))
+                    
+                except Exception as e:
+                    messages.error(request, f'❌ Erro ao processar arquivo: {str(e)}')
+        else:
+            form = ImportarProdutosForm()
+        
+        # Renderizar template customizado
+        context = {
+            'form': form,
+            'title': 'Importar Múltiplos Produtos',
+            'opts': self.model._meta,
+            'has_view_permission': True,
+        }
+        return render(request, 'admin/importar_produtos.html', context)
 
 
 @admin.register(ProdutoManualProxy)
