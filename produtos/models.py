@@ -545,6 +545,14 @@ class EscalonamentoConfig(models.Model):
         help_text="Deletar logs com mais de X dias (recomendado: 30)"
     )
 
+    # ===== SEGURANÇA =====
+    session_timeout_minutos = models.IntegerField(
+        default=30,
+        verbose_name="Timeout de Logout (minutos)",
+        help_text="Tempo de inatividade antes de fazer logout automático (recomendado: 30 min). "
+                  "Usado em: SESSION_COOKIE_AGE no Django"
+    )
+
     # ===== METADATA =====
     atualizado_em = models.DateTimeField(
         auto_now=True,

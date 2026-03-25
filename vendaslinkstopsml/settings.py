@@ -197,3 +197,22 @@ LOGGING = {
     },
 }
 
+# ============================================================
+# CONFIGURAÇÕES DE SESSÃO E LOGOUT TIMEOUT
+# ============================================================
+# Carrega timeout de logout do banco de dados (via EscalonamentoConfig)
+# Fallback: 30 minutos se não conseguir carregar do BD
+
+try:
+    from produtos.config_escalonamento import SESSION_COOKIE_AGE
+    # SESSION_COOKIE_AGE já está em segundos
+except ImportError:
+    # Se não conseguir importar, usa default de 30 minutos
+    SESSION_COOKIE_AGE = 30 * 60  # 30 minutos em segundos
+
+# Outras configurações de session
+SESSION_COOKIE_SECURE = not DEBUG  # HTTPS em produção
+SESSION_COOKIE_HTTPONLY = True  # Proteger contra XSS
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True  # Logout ao fechar navegador
+
+

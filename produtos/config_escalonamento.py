@@ -114,6 +114,14 @@ LOG_LEVEL = _load_config_from_db_or_env('log_level', 'INFO', str)
 LOGS_RETENTION_DAYS = _load_config_from_db_or_env('logs_retention_dias', 30, int)
 
 # ============================================================================
+# CONFIGURAÇÕES DE SEGURANÇA (SESSION/LOGOUT)
+# ============================================================================
+
+SESSION_TIMEOUT_MINUTOS = _load_config_from_db_or_env('session_timeout_minutos', 30, int)
+SESSION_COOKIE_AGE = SESSION_TIMEOUT_MINUTOS * 60  # Convertido para segundos
+SESSION_COOKIE_AGE_SEGUNDOS = SESSION_COOKIE_AGE  # Alias para clareza
+
+# ============================================================================
 # CONFIGURAÇÕES DE CELERY (OPCIONAL)
 # ============================================================================
 

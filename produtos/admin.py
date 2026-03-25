@@ -654,7 +654,18 @@ class EscalonamentoConfigAdmin(admin.ModelAdmin):
                 'logs_retention_dias',
             ),
         }),
-        ('📝 NOTAS E HISTÓRICO', {
+        ('� SEGURANÇA', {
+            'description': (
+                '<strong style="font-size:13px;color:#2196f3;">Configurações de segurança de sessão.</strong><br><br>'
+                '⏱️ <strong>Timeout de Logout</strong>: Tempo de inatividade antes de logout automático<br>'
+                '⚠️ Valores baixos (10min) = mais seguro mas inconveniente<br>'
+                '✅ Recomendado: 30 minutos para balancear segurança e UX'
+            ),
+            'fields': (
+                'session_timeout_minutos',
+            ),
+        }),
+        ('�📝 NOTAS E HISTÓRICO', {
             'classes': ('wide',),
             'description': (
                 '<strong style="font-size:13px;color:#2196f3;">Documenterenomudanças.</strong><br>'
