@@ -1197,24 +1197,53 @@ def extrair_dados_produto(url: str) -> dict:
     
     Funciona em threads do Django (sem event loop) e em contextos com loop já rodando.
     Compatível com SQLite (dev com admin) e MySQL (produção com workers).
+    
+    ✅ CORREÇÃO: Isolamento correto de event loop para threads worker
+    Cada thread tem seu próprio event loop separado.
     """
-    try:
-        # Tentar detecção e extração
-        dados = _detectar_plataforma_e_extrair(url)
-        if dados:
-            return dados
-        
-        # Fallback para ML se não conseguir detectar
+    def _executar_deteccao_no_loop():
+        """Executa detecção em um novo event loop isolado."""
+        try:
+            return _detectar_plataforma_e_extrair(url)
+        except Exception as e:
+            logger.debug(f"Erro na detecção: {e}")
+            return None
+    
+    def _executar_ml_no_loop():
+        """Executa ML fallback em um novo event loop isolado."""
         return asyncio.run(_extrair_dados_ml(url))
-    except RuntimeError as e:
-        # Se falhar por event loop, usar ThreadPoolExecutor
-        if 'asyncio.run() cannot be called from a running event loop' in str(e):
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(_detectar_plataforma_e_extrair, url)
-                resultado = future.result(timeout=60)
-                return resultado if resultado else asyncio.run(_extrair_dados_ml(url))
-        else:
+    
+    import concurrent.futures
+    import sys
+    
+    # Verificar se há um event loop rodando
+    try:
+        loop = asyncio.get_running_loop()
+        # Se chegar aqui, há um loop rodando - usar thread para escapar
+        logger.debug("⚠️ Event loop detectado - usando thread separada para asyncio")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            try:
+                # Primeira tentativa: detecção e extração na thread
+                future = executor.submit(_executar_deteccao_no_loop)
+                dados = future.result(timeout=90)
+                if dados:
+                    return dados
+                
+                # Fallback: ML na thread
+                future = executor.submit(_executar_ml_no_loop)
+                return future.result(timeout=90)
+            except Exception as e:
+                logger.error(f"❌ Erro ao processar em thread isolada: {e}")
+                raise
+    except RuntimeError:
+        # Não há event loop rodando - podemos usar asyncio.run() diretamente
+        try:
+            dados = _detectar_plataforma_e_extrair(url)
+            if dados:
+                return dados
+            return asyncio.run(_extrair_dados_ml(url))
+        except Exception as e:
+            logger.error(f"❌ Erro ao extrair dados: {e}")
             raise
 
 
@@ -1261,10 +1290,24 @@ def processar_produto_automatico(produto):
     - Falha 3+ → DESATIVA permanentemente
     
     Reduz taxa de falsos positivos (timeout/rate limit) de 11% para ~2-3%.
+    
+    ✅ CORREÇÃO: Recarrega objeto para evitar stale data em threads worker
     """
-    from .models import StatusExtracao, Categoria
+    from .models import StatusExtracao, Categoria, ProdutoAutomatico
     from .config_escalonamento import LIMITE_FALHAS, get_retry_delay
     from django.utils.text import slugify
+    from django.db import connection
+    
+    # ✅ CORREÇÃO: Recarregar produto do BD para garantir estado atual em worker threads
+    # Evita stale data quando processando em paralelo
+    try:
+        produto = ProdutoAutomatico.objects.get(pk=produto.pk)
+    except ProdutoAutomatico.DoesNotExist:
+        logger.error(f"❌ Produto não encontrado no BD: pk={produto.pk}")
+        return False
+    
+    # Fechar connection anterior se houver (thread safety para Django)
+    connection.close()
     
     produto.status_extracao = StatusExtracao.PROCESSANDO
     produto.erro_extracao = ''

@@ -43,19 +43,42 @@ def _worker(worker_id: int):
             task_args = task_data.get('args', ())
             task_kwargs = task_data.get('kwargs', {})
             
+            produto_id = None
             try:
                 if task_args and hasattr(task_args[0], 'id'):
-                    logger.info(f"👷 Worker #{worker_id} processando: {task_func.__name__}(produto_id={task_args[0].id})")
+                    produto_id = task_args[0].id
+                    logger.info(f"👷 Worker #{worker_id} processando: {task_func.__name__}(produto_id={produto_id})")
                 else:
                     logger.info(f"👷 Worker #{worker_id} processando: {task_func.__name__}")
                 
                 # Execute task - rate limiting é feito dentro do scraper agora
                 result = task_func(*task_args, **task_kwargs)
-                logger.info(f"✅ Worker #{worker_id} completou com sucesso")
+                
+                # ✅ Log sucesso com resultado
+                if result:
+                    if produto_id:
+                        logger.info(f"✅ Worker #{worker_id} completou com SUCESSO (produto_id={produto_id})")
+                    else:
+                        logger.info(f"✅ Worker #{worker_id} completou com sucesso")
+                else:
+                    if produto_id:
+                        logger.warning(f"⚠️ Worker #{worker_id} completou mas resultado=False (produto_id={produto_id})")
+                    else:
+                        logger.warning(f"⚠️ Worker #{worker_id} completou mas resultado=False")
+                        
             except Exception as e:
-                logger.error(f"👷 Worker #{worker_id} erro: {type(e).__name__}: {e}", exc_info=True)
+                logger.error(
+                    f"❌ Worker #{worker_id} ERRO: {type(e).__name__}: {str(e)[:150]}", 
+                    exc_info=True
+                )
+                if produto_id:
+                    logger.error(f"   Produto ID: {produto_id}")
             finally:
-                _task_queue.task_done()
+                try:
+                    _task_queue.task_done()
+                except ValueError:
+                    # Task already marked done
+                    pass
                 
         except queue.Empty:
             continue
