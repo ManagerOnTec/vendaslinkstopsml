@@ -32,35 +32,42 @@ except ImportError:
 # RATE LIMITING PARA MÚLTIPLAS PLATAFORMAS
 # ============================================================================
 # Evita sobrecarga do servidor ao fazer múltiplas requisições simultâneas
+# IMPORTANTE: Usa threading.Semaphore (não asyncio.Semaphore) para compatibilidade
+# com múltiplas threads rodando asyncio.run() independentemente
 
-_scraper_semaphore = None  # Será inicializado conforme necessário
+_scraper_semaphore = threading.Semaphore(2)  # Máx 2 requisições simultâneas entre threads
 _last_request_time = None
 _rate_limit_lock = threading.Lock()
 
 MIN_DELAY_BETWEEN_REQUESTS_MS = 300  # Mínimo delay entre requisições (300ms)
 
 
-def _get_semaphore():
-    """Retorna semáforo com limite de 2 requisições simultâneas."""
-    global _scraper_semaphore
-    if _scraper_semaphore is None:
-        _scraper_semaphore = asyncio.Semaphore(2)  # Máx 2 requisições em paralelo
-    return _scraper_semaphore
-
-
 def _enforce_rate_limit():
-    """Garante delay mínimo entre requisições."""
+    """
+    Garante delay mínimo entre requisições e controla paralelismo via semáforo.
+    Thread-safe: funciona corretamente quando múltiplas threads fazem asyncio.run()
+    """
     global _last_request_time
     
-    with _rate_limit_lock:
-        current_time = time.time()
-        if _last_request_time:
-            elapsed = (current_time - _last_request_time) * 1000  # Converter para ms
-            if elapsed < MIN_DELAY_BETWEEN_REQUESTS_MS:
-                sleep_time = (MIN_DELAY_BETWEEN_REQUESTS_MS - elapsed) / 1000
-                logger.debug(f"⏱️ Rate limiting: aguardando {sleep_time:.2f}s")
-                time.sleep(sleep_time)
-        _last_request_time = time.time()
+    # Adquirir semáforo para limitar requisições simultâneas
+    # Timeout curto evita deadlocks
+    acquired = _scraper_semaphore.acquire(timeout=30)
+    if not acquired:
+        logger.warning("⚠️ Timeout ao adquirir semáforo de rate limiting (30s)")
+        return
+    
+    try:
+        with _rate_limit_lock:
+            current_time = time.time()
+            if _last_request_time:
+                elapsed = (current_time - _last_request_time) * 1000  # Converter para ms
+                if elapsed < MIN_DELAY_BETWEEN_REQUESTS_MS:
+                    sleep_time = (MIN_DELAY_BETWEEN_REQUESTS_MS - elapsed) / 1000
+                    logger.debug(f"⏱️ Rate limiting: aguardando {sleep_time:.2f}s")
+                    time.sleep(sleep_time)
+            _last_request_time = time.time()
+    finally:
+        _scraper_semaphore.release()
 
 
 
