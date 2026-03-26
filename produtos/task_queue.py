@@ -28,7 +28,7 @@ _lock = threading.Lock()
 def _worker(worker_id: int):
     """Worker thread que processa itens da fila de forma independente."""
     global _workers_running
-    logger.info(f"👷 Worker #{worker_id} iniciado")
+    logger.info(f"👷 Worker #{worker_id} iniciado (daemon={threading.current_thread().daemon})")
     
     while _workers_running:
         try:
@@ -44,18 +44,23 @@ def _worker(worker_id: int):
             task_kwargs = task_data.get('kwargs', {})
             
             try:
-                logger.debug(f"👷 Worker #{worker_id} processando: {task_func.__name__}")
+                if task_args and hasattr(task_args[0], 'id'):
+                    logger.info(f"👷 Worker #{worker_id} processando: {task_func.__name__}(produto_id={task_args[0].id})")
+                else:
+                    logger.info(f"👷 Worker #{worker_id} processando: {task_func.__name__}")
+                
                 # Execute task - rate limiting é feito dentro do scraper agora
-                task_func(*task_args, **task_kwargs)
+                result = task_func(*task_args, **task_kwargs)
+                logger.info(f"✅ Worker #{worker_id} completou com sucesso")
             except Exception as e:
-                logger.error(f"👷 Worker #{worker_id} erro: {e}", exc_info=True)
+                logger.error(f"👷 Worker #{worker_id} erro: {type(e).__name__}: {e}", exc_info=True)
             finally:
                 _task_queue.task_done()
                 
         except queue.Empty:
             continue
         except Exception as e:
-            logger.error(f"👷 Worker #{worker_id} erro crítico: {e}", exc_info=True)
+            logger.error(f"👷 Worker #{worker_id} erro crítico: {type(e).__name__}: {e}", exc_info=True)
 
 
 def _ensure_workers():
@@ -64,7 +69,12 @@ def _ensure_workers():
     
     with _lock:
         # Verificar se há workers mortos e remover
+        workers_vivos_antes = len(_worker_threads)
         _worker_threads = [w for w in _worker_threads if w.is_alive()]
+        workers_vivos_depois = len(_worker_threads)
+        
+        if workers_vivos_antes > workers_vivos_depois:
+            logger.warning(f"⚠️ {workers_vivos_antes - workers_vivos_depois} worker(s) morto(s) detectado(s). Recriando...")
         
         # Iniciar workers faltantes
         while len(_worker_threads) < NUM_WORKERS:
@@ -78,6 +88,7 @@ def _ensure_workers():
             )
             thread.start()
             _worker_threads.append(thread)
+            logger.debug(f"🆕 Nova worker thread criada: {thread.name}")
         
         if len(_worker_threads) > 0 and not _workers_running:
             _workers_running = True
@@ -121,6 +132,8 @@ def queue_batch_tasks(func: Callable, items: List[Any], rate_limit_ms: int = 100
     """
     _ensure_workers()
     
+    logger.info(f"📋 Iniciando enfileiramento de {len(items)} tarefa(s) com {NUM_WORKERS} workers disponíveis")
+    
     for i, item in enumerate(items):
         task_data = {
             'func': func,
@@ -129,12 +142,17 @@ def queue_batch_tasks(func: Callable, items: List[Any], rate_limit_ms: int = 100
         }
         _task_queue.put(task_data)
         
+        if hasattr(item, 'id'):
+            logger.debug(f"   → Tarefa {i+1}/{len(items)}: {func.__name__}(id={item.id})")
+        else:
+            logger.debug(f"   → Tarefa {i+1}/{len(items)}: {func.__name__}")
+        
         # Pequeno delay apenas entre enfileiramento (não bloqueia execução)
         if i < len(items) - 1:
             time.sleep(rate_limit_ms / 1000.0)
     
-    logger.info(f"📋 {len(items)} tarefa(s) enfileirada(s) para processamento paralelo "
-                f"({NUM_WORKERS} workers ativos)")
+    logger.info(f"✅ {len(items)} tarefa(s) adicionada(s) à fila (tamanho atual: {_task_queue.qsize()}). "
+                f"Workers processando em background...")
 
 
 

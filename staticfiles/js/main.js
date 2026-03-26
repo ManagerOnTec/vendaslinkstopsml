@@ -87,4 +87,85 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    // === Seção Análise e Recomendação - Auto collapse e toggle ===
+    const analiseRecomendacao = document.getElementById('analiseRecomendacao');
+    const analiseConteudo = document.getElementById('analiseConteudo');
+    const btnToggleAnalise = document.getElementById('btnToggleAnalise');
+
+    if (analiseRecomendacao && analiseConteudo && btnToggleAnalise) {
+        let isExpanded = true;
+        let autoCollapseTimer = null;
+        const storageKey = 'analiseRecomendacaoExpanded';
+
+        // Restaurar estado da sessão anterior
+        const savedState = localStorage.getItem(storageKey);
+        if (savedState === 'false') {
+            isExpanded = false;
+            collapseAnalise();
+        }
+
+        // Auto-recolher após 3 segundos - apenas se estiver expandido
+        autoCollapseTimer = setTimeout(function () {
+            if (isExpanded) {
+                collapseAnalise();
+                isExpanded = false;
+                localStorage.setItem(storageKey, 'false');
+            }
+        }, 3000);
+
+        // Click para expandir/recolher
+        btnToggleAnalise.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Limpar o timeout de auto-collapse ao clicar
+            if (autoCollapseTimer) {
+                clearTimeout(autoCollapseTimer);
+                autoCollapseTimer = null;
+            }
+            
+            if (isExpanded) {
+                collapseAnalise();
+                isExpanded = false;
+            } else {
+                expandAnalise();
+                isExpanded = true;
+            }
+            localStorage.setItem(storageKey, isExpanded);
+        });
+
+        function collapseAnalise() {
+            // Sempre manter overflow hidden para a animação funcionar
+            analiseConteudo.style.overflow = 'hidden';
+            analiseConteudo.style.maxHeight = '0';
+            analiseConteudo.style.opacity = '0';
+            analiseConteudo.style.marginTop = '0';
+            analiseConteudo.style.marginBottom = '0';
+            analiseConteudo.style.paddingTop = '0';
+            analiseConteudo.style.paddingBottom = '0';
+            
+            btnToggleAnalise.style.opacity = '0.6';
+            btnToggleAnalise.innerHTML = '<i class="bi bi-chevron-down"></i>';
+            btnToggleAnalise.title = 'Expandir análise e recomendações';
+        }
+
+        function expandAnalise() {
+            // Calcular altura real do conteúdo
+            analiseConteudo.style.overflow = 'hidden';
+            analiseConteudo.style.maxHeight = 'none';
+            const scrollHeight = analiseConteudo.scrollHeight;
+            analiseConteudo.style.maxHeight = scrollHeight + 50 + 'px';
+            
+            analiseConteudo.style.opacity = '1';
+            analiseConteudo.style.marginTop = '';
+            analiseConteudo.style.marginBottom = '';
+            analiseConteudo.style.paddingTop = '';
+            analiseConteudo.style.paddingBottom = '';
+            
+            btnToggleAnalise.style.opacity = '1';
+            btnToggleAnalise.innerHTML = '<i class="bi bi-chevron-up"></i>';
+            btnToggleAnalise.title = 'Recolher análise e recomendações';
+        }
+    }
+
 });

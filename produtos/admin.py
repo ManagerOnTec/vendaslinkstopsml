@@ -1,12 +1,15 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.contrib import messages
+import logging
 from .models import (
     Categoria, Anuncio, ProdutoAutomatico, 
     ProdutoAutomaticoProxy, ProdutoManualProxy,
     AgendamentoAtualizacao, LogAtualizacao, DocumentoLegal, EscalonamentoConfig,
     Cliente, SiteMaintenanceConfig
 )
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(Categoria)
@@ -362,6 +365,7 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
                     
                     # Processar produtos se solicitado
                     if processar_imediatamente and produtos_criados:
+                        logger.info(f"📥 Importação: Enfileirando {len(produtos_criados)} para processamento automático")
                         queue_batch_tasks(processar_produto_automatico, produtos_criados)
                         messages.success(
                             request,
@@ -370,6 +374,7 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
                             f'Processamento em andamento...'
                         )
                     else:
+                        logger.info(f"📥 Importação: {len(produtos_criados)} produtos criados SEM enfileiramento")
                         messages.success(
                             request,
                             f'✅ {len(produtos_criados)} produto(s) criado(s) com sucesso. '
