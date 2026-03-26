@@ -703,3 +703,92 @@ class Cliente(models.Model):
     
     def __str__(self):
         return f"{self.nome} ({self.email})"
+
+
+# ============================================================
+# CONFIGURAÇÃO DE MANUTENÇÃO DO SITE
+# ============================================================
+
+class SiteMaintenanceConfig(models.Model):
+    """
+    Configuração de manutenção do site - Singleton.
+    Apenas 1 registro deve existir. Editável via Django Admin.
+    
+    Quando ativo, o middleware intercepta requisições e exibe template de manutenção.
+    """
+    em_manutencao = models.BooleanField(
+        default=False,
+        verbose_name="Site em Manutenção",
+        help_text="Marque para ativar modo de manutenção"
+    )
+    
+    titulo = models.CharField(
+        max_length=200,
+        default="Sistema em Manutenção",
+        verbose_name="Título",
+        help_text="Título exibido no topo da página de manutenção"
+    )
+    
+    mensagem = models.TextField(
+        default="Estamos realizando uma atualização programada. Retorne em breve!",
+        verbose_name="Mensagem de Manutenção",
+        help_text="Mensagem detalhada exibida aos clientes (suporta HTML básico)"
+    )
+    
+    tempo_estimado_minutos = models.IntegerField(
+        default=30,
+        verbose_name="Tempo Estimado de Retorno (minutos)",
+        help_text="Tempo estimado para conclusão da manutenção"
+    )
+    
+    mostrar_tempo_estimado = models.BooleanField(
+        default=True,
+        verbose_name="Exibir Tempo Estimado",
+        help_text="Se ativo, exibe 'Tempo estimado de retorno: X min'"
+    )
+    
+    email_contato = models.EmailField(
+        blank=True,
+        verbose_name="Email de Contato",
+        help_text="Email para dúvidas (opcional)"
+    )
+    
+    data_inicio = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Data/Hora de Início",
+        help_text="Quando a manutenção começou"
+    )
+    
+    criado_em = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Criado em"
+    )
+    
+    atualizado_em = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Atualizado em"
+    )
+    
+    class Meta:
+        verbose_name = "Configuração de Manutenção do Site"
+        verbose_name_plural = "Configuração de Manutenção do Site"
+    
+    def __str__(self):
+        status = "🔴 ATIVO" if self.em_manutencao else "🟢 INATIVO"
+        return f"Manutenção do Site [{status}]"
+    
+    def save(self, *args, **kwargs):
+        """Garante que apenas 1 registro existe (Singleton)."""
+        self.pk = 1
+        super().save(*args, **kwargs)
+    
+    def delete(self, *args, **kwargs):
+        """Impede exclusão do registro único."""
+        pass
+    
+    @classmethod
+    def get_config(cls):
+        """Obtém a configuração única do site, criando se não existir."""
+        config, _ = cls.objects.get_or_create(pk=1)
+        return config

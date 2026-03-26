@@ -51,6 +51,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'produtos.middleware.MaintenanceMiddleware',  # ← Middleware de manutenção
 ]
 
 ROOT_URLCONF = 'vendaslinkstopsml.urls'

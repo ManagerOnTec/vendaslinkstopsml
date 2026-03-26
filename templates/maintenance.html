@@ -1,0 +1,207 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema em Manutenção</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        html, body {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .maintenance-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .maintenance-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 60px 40px;
+            max-width: 600px;
+            text-align: center;
+            animation: slideIn 0.6s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .maintenance-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+        }
+        
+        .maintenance-title {
+            color: #333;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .maintenance-message {
+            color: #555;
+            font-size: 16px;
+            line-height: 1.8;
+            margin-bottom: 30px;
+            min-height: 60px;
+        }
+        
+        .maintenance-message p {
+            margin-bottom: 10px;
+        }
+        
+        .time-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin: 30px 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .time-label {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+        
+        .time-value {
+            font-size: 36px;
+            font-weight: 700;
+        }
+        
+        .contact-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        .contact-text {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .contact-email {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .contact-email:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .footer-text {
+            margin-top: 30px;
+            color: #aaa;
+            font-size: 13px;
+        }
+        
+        .spinner {
+            display: inline-block;
+            margin-left: 8px;
+        }
+        
+        @media (max-width: 600px) {
+            .maintenance-card {
+                padding: 40px 20px;
+            }
+            
+            .maintenance-title {
+                font-size: 24px;
+            }
+            
+            .maintenance-icon {
+                font-size: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="maintenance-container">
+        <div class="maintenance-card">
+            <!-- Icon -->
+            <div class="maintenance-icon">
+                🔧
+            </div>
+            
+            <!-- Title -->
+            <h1 class="maintenance-title">
+                {{ titulo }}
+            </h1>
+            
+            <!-- Message -->
+            <div class="maintenance-message">
+                {{ mensagem|safe }}
+            </div>
+            
+            <!-- Time Estimate -->
+            {% if mostrar_tempo_estimado %}
+            <div class="time-container">
+                <div class="time-label">
+                    ⏱️ Tempo Estimado de Retorno
+                </div>
+                <div class="time-value">
+                    {{ tempo_estimado_minutos }} min
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Contact Section -->
+            {% if email_contato %}
+            <div class="contact-section">
+                <div class="contact-text">
+                    💬 Dúvidas ou problemas?
+                </div>
+                <a href="mailto:{{ email_contato }}" class="contact-email">
+                    {{ email_contato }}
+                </a>
+            </div>
+            {% endif %}
+            
+            <!-- Footer -->
+            <div class="footer-text">
+                ✨ Voltaremos em breve com novidades incríveis!
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

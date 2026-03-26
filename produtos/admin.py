@@ -5,7 +5,7 @@ from .models import (
     Categoria, Anuncio, ProdutoAutomatico, 
     ProdutoAutomaticoProxy, ProdutoManualProxy,
     AgendamentoAtualizacao, LogAtualizacao, DocumentoLegal, EscalonamentoConfig,
-    Cliente
+    Cliente, SiteMaintenanceConfig
 )
 
 
@@ -928,3 +928,112 @@ class ClienteAdmin(admin.ModelAdmin):
     list_editable = ('ativo',)
     readonly_fields = ('criado_em', 'atualizado_em')
     ordering = ('-criado_em',)
+
+
+@admin.register(SiteMaintenanceConfig)
+class SiteMaintenanceConfigAdmin(admin.ModelAdmin):
+    """Admin para configuração de manutenção do site - Singleton.
+    
+    Sempre mostra o único registro. Ao acessar a listagem, redireciona direto para editar.
+    """
+    
+    list_display = ('status_display', 'titulo', 'tempo_estimado_display', 'atualizado_em')
+    readonly_fields = ('criado_em', 'atualizado_em')
+    
+    fieldsets = (
+        ('🔴 STATUS DE MANUTENÇÃO', {
+            'fields': ('em_manutencao',),
+            'description': (
+                '<strong style="font-size:14px;color:#d32f2f;">Marque para ATIVAR o modo de manutenção. '
+                'Todos os visitantes verão a página de manutenção em vez do site normal.</strong>'
+            )
+        }),
+        ('📝 MENSAGENS', {
+            'fields': ('titulo', 'mensagem', 'email_contato'),
+            'description': (
+                'Customize a mensagem exibida aos clientes. '
+                'A mensagem suporta HTML básico (<strong>p</strong>, <strong>h2</strong>, <strong>h3</strong>, <strong>br</strong>, <strong>b</strong>, <strong>i</strong>, etc)'
+            )
+        }),
+        ('⏱️ DURAÇÃO ESTIMADA', {
+            'fields': ('tempo_estimado_minutos', 'mostrar_tempo_estimado'),
+            'description': 'Digite o tempo estimado em minutos. Será exibido como "Tempo estimado: X min".'
+        }),
+        ('📅 CONTROLE', {
+            'fields': ('data_inicio', 'criado_em', 'atualizado_em'),
+            'description': 'Data de início é preenchida automaticamente quando ativa a manutenção.'
+        }),
+    )
+    
+    def status_display(self, obj):
+        """Exibe status visual com emoji."""
+        if obj.em_manutencao:
+            return format_html(
+                '<span style="background:#d32f2f;color:white;padding:5px 12px;'
+                'border-radius:20px;font-weight:bold;display:inline-block;">🔴 MANUTENÇÃO ATIVA</span>'
+            )
+        return format_html(
+            '<span style="background:#388e3c;color:white;padding:5px 12px;'
+            'border-radius:20px;font-weight:bold;display:inline-block;">🟢 SITE OPERACIONAL</span>'
+        )
+    status_display.short_description = 'Status'
+    
+    def tempo_estimado_display(self, obj):
+        """Exibe tempo estimado formatado."""
+        if obj.mostrar_tempo_estimado:
+            return f"{obj.tempo_estimado_minutos} min"
+        return "-"
+    tempo_estimado_display.short_description = 'Retorno Estimado'
+    
+    def save_model(self, request, obj, form, change):
+        """Ao salvar, registra data de início se ativando manutenção."""
+        if obj.em_manutencao and not obj.data_inicio:
+            from django.utils import timezone
+            obj.data_inicio = timezone.now()
+        
+        super().save_model(request, obj, form, change)
+        
+        # Mensagem feedback
+        if obj.em_manutencao:
+            messages.warning(
+                request,
+                f'⚠️ MANUTENÇÃO ATIVADA! Site exibindo página de manutenção. '
+                f'Retorno estimado: {obj.tempo_estimado_minutos} minutos.'
+            )
+        else:
+            messages.success(
+                request,
+                '✅ Manutenção desativada. Site retornando ao normal.'
+            )
+    
+    def has_delete_permission(self, request, obj=None):
+        """Impede exclusão do registro."""
+        return False
+    
+    def has_add_permission(self, request):
+        """Não permite criar novos registros."""
+        return False
+    
+    def get_urls(self):
+        """Redireciona list view direto para edit do único registro."""
+        from django.urls import path
+        from django.views.decorators.http import require_http_methods
+        
+        urls = super().get_urls()
+        
+        custom_urls = [
+            path(
+                '',
+                require_http_methods(['GET'])(self.admin_site.admin_view(self.singleton_redirect)),
+                name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_changelist',
+            ),
+        ]
+        
+        return custom_urls + urls
+    
+    def singleton_redirect(self, request):
+        """Redireciona list view → edit da config única."""
+        from django.shortcuts import redirect
+        
+        config = SiteMaintenanceConfig.get_config()
+        return redirect(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change', config.pk)

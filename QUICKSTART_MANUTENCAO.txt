@@ -1,0 +1,201 @@
+QuickStart: Manutenção do Site em 3 Passos
+═══════════════════════════════════════════════════════════════════════════
+
+✅ IMPLEMENTAÇÃO JÁ CONCLUÍDA!
+
+Você pode COMEÇAR A USAR AGORA! 🚀
+
+
+PASSO 1️⃣  - ACESSAR O ADMIN
+═══════════════════════════════════════════════════════════════════════════
+
+Abra seu navegador e vá para:
+  https://seusite.com/admin/
+
+Faça login com suas credenciais de admin.
+
+
+PASSO 2️⃣  - NAVEGAR PARA CONFIGURAÇÃO
+═══════════════════════════════════════════════════════════════════════════
+
+No menu esquerdo, clique em:
+  
+  Produtos
+  └─ Configuração de Manutenção do Site
+
+A página abrirá automaticamente para edição (interface otimizada).
+
+
+PASSO 3️⃣  - ATIVAR MANUTENÇÃO
+═══════════════════════════════════════════════════════════════════════════
+
+Preencha os campos:
+
+  [ ] ☑ Em Manutenção ..................... MARQUE ISTO PRIMEIRO!
+  
+  [Sistema em Manutenção] ............... Seu Título (ex: Atualizando!)
+  
+  [Mensagem de Manutenção] .............. Sua Mensagem
+     Exemplo: "Estamos melhorando o site. Voltaremos em breve!"
+     (Suporta HTML se quiser algo mais elaborado)
+  
+  [Tempo Estimado de Retorno] .......... Ex: 30 (minutos)
+  
+  [Email de Contato] (opcional) ........ Ex: suporte@seusite.com
+
+Clique em SALVAR (botão verde no canto inferior direito).
+
+✅ PRONTO! Seu site já está exibindo a página de manutenção!
+
+
+O QUE OS VISITANTES VERÃO
+═══════════════════════════════════════════════════════════════════════════
+
+Quando a manutenção está ativa, qualquer visitante que acessar seu site verá:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│                          🔧                                     │
+│                                                                 │
+│                  Sistema em Manutenção                         │
+│                                                                 │
+│      Estamos melhorando o site. Voltaremos em breve!          │
+│                                                                 │
+│               ⏱️  Tempo Estimado de Retorno                    │
+│                         30 min                                 │
+│                                                                 │
+│            💬 suporte@seusite.com (se informado)              │
+│                                                                 │
+│        ✨ Voltaremos em breve com novidades incríveis!        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+→ Smartphone: Layout responsivo (automático)
+→ Desktop: Layout centralizado e profissional
+
+
+DESATIVAR MANUTENÇÃO (Quando terminar)
+═══════════════════════════════════════════════════════════════════════════
+
+1. Vá em: Produto > Configuração de Manutenção do Site
+
+2. Desmarque: ☑ Em Manutenção
+
+3. Clique em SALVAR
+
+✅ Pronto! Seu site volta ao normal automaticamente!
+
+
+RECURSOS ESPECIAIS
+═══════════════════════════════════════════════════════════════════════════
+
+✓ Admin sempre acessível
+  └─ Você pode editar a mensagem ENQUANTO está em manutenção
+
+✓ APIs não são bloqueadas
+  └─ Webhooks, apps mobile continuam funcionando
+
+✓ Assets (CSS, JS, imagens) acessíveis
+  └─ Site fica responsivo mesmo em manutenção
+
+✓ HTML suportado
+  └─ Use <p>, <h2>, <b>, <i>, <ul>, <li> para formatar a mensagem
+
+✓ Sem redeploy necessário
+  └─ Tudo funciona pelo banco de dados
+
+
+EXEMPLOS PRONTOS PARA COPIAR/COLAR
+═══════════════════════════════════════════════════════════════════════════
+
+Exemplo 1: Patch de Segurança (rápido)
+──────────────────────────────────────
+Título: Atualização de Segurança
+Mensagem: Realizamos uma atualização de segurança importante.
+Tempo: 10
+
+
+Exemplo 2: Upgrade Grande (longo)
+──────────────────────────────────
+Título: Melhorias Importantes
+Mensagem: <p><strong>Estamos melhorando sua experiência!</strong></p>
+          <p>Implementamos:</p>
+          <ul>
+            <li>✓ Melhor performance</li>
+            <li>✓ Novo design</li>
+            <li>✓ Mais segurança</li>
+          </ul>
+          <p>Obrigado pela paciência!</p>
+Tempo: 60
+
+
+Exemplo 3: Com Email
+──────────────────
+Título: Sistema em Atualização
+Mensagem: Estamos realizando uma manutenção programada. Obrigado pela paciência!
+Tempo: 45
+Email: suporte@seusite.com
+
+
+DÚVIDAS RÁPIDAS
+═══════════════════════════════════════════════════════════════════════════
+
+P: Meu site caiu. Como ativo manutenção rapidamente?
+R: Acesse /admin/ → Produtos → Configuração → Marque "Em Manutenção" → Salvar
+
+P: Visitas novas durante manutenção prejudicam meu site?
+R: Não! HTTP 503 indica manutenção temporária (buscadores entendem)
+
+P: E se eu esquecer de desativar?
+R: Volta ao admin e desmarque a opção. Site retorna ao normal em segundos.
+
+P: Posso editar a mensagem sem desativar?
+R: Sim! Admin funciona mesmo em manutenção.
+
+P: E os visitantes que estão acessando agora?
+R: Verão a página de manutenção na próxima requisição (automático)
+
+
+CHECKLIST DE USO
+═══════════════════════════════════════════════════════════════════════════
+
+Antes de ativar manutenção:
+  ☐ Comunicar aos clientes (email, redes sociais, etc) - IMPORTANTE!
+  ☐ Preparar a mensagem de manutenção
+  ☐ Testar a mensagem em mobile e desktop
+
+Ativando manutenção:
+  ☐ Ir em /admin/
+  ☐ Produtos > Configuração de Manutenção
+  ☐ Preencher todos os campos importantes
+  ☐ Marcar ☑ Em Manutenção
+  ☐ Clicar em Salvar
+  ☐ Testar acessando seu site em navegação anônima
+
+Terminando manutenção:
+  ☐ Desmarcar ☑ Em Manutenção
+  ☐ Clicar em Salvar
+  ☐ Aguardar 5 segundos (cache do browser)
+  ☐ Refreshar sua página (F5)
+  ☐ Confirmar que site está operacional
+  ☐ Comunicar aos clientes que voltou
+
+
+🎯 RESUMO
+═══════════════════════════════════════════════════════════════════════════
+
+O sistema está 100% funcional e pronto para usar.
+
+Acesse /admin/ AGORA e teste! 
+
+Leva menos de 1 minuto para:
+  ✓ Ativar manutenção
+  ✓ Editar mensagem
+  ✓ Desativar manutenção
+
+Nenhuma experiência técnica necessária! 🚀
+
+
+═══════════════════════════════════════════════════════════════════════════
+Para mais detalhes, veja: GUIA_MANUTENCAO_SITE.md
+═══════════════════════════════════════════════════════════════════════════
