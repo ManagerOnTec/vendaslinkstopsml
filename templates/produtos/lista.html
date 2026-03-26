@@ -213,10 +213,10 @@ Melhores Ofertas e Análise de Produtos - Mercado Livre, Amazon, Shopee | {{ SIT
             
             <!-- Botões de Plataformas -->
             {% for plataforma in plataformas %}
-            <a href="?plataforma={{ plataforma.value }}{% if busca_atual %}&q={{ busca_atual|urlencode }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual|urlencode }}{% endif %}"
-               class="badge {% if plataforma.value == plataforma_atual %}bg-primary text-white{% else %}bg-light text-dark border border-secondary{% endif %} me-1 cursor-pointer"
+            <a href="?plataforma={{ plataforma.id }}{% if busca_atual %}&q={{ busca_atual|urlencode }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual|urlencode }}{% endif %}"
+               class="badge {% if plataforma.id|stringformat:'s' == plataforma_atual %}bg-primary text-white{% else %}bg-light text-dark border border-secondary{% endif %} me-1 cursor-pointer"
                style="cursor: pointer; padding: 6px 12px; text-decoration: none; display: inline-block;">
-                {{ plataforma.label }}
+                {{ plataforma.nome }}
             </a>
             {% endfor %}
         </div>

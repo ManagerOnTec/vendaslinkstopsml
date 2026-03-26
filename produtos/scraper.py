@@ -1293,7 +1293,7 @@ def processar_produto_automatico(produto):
     
     ✅ CORREÇÃO: Recarrega objeto para evitar stale data em threads worker
     """
-    from .models import StatusExtracao, Categoria, ProdutoAutomatico
+    from .models import StatusExtracao, Categoria, ProdutoAutomatico, PlataformaEcommerce
     from .config_escalonamento import LIMITE_FALHAS, get_retry_delay
     from django.utils.text import slugify
     
@@ -1313,9 +1313,10 @@ def processar_produto_automatico(produto):
         logger.info(f"🔄 Iniciando processamento do link: {produto.link_afiliado}")
         
         # Detectar plataforma
-        plataforma_detectada = DetectorPlataforma.detectar(produto.link_afiliado)
-        produto.plataforma = plataforma_detectada
-        logger.info(f"🔍 Plataforma detectada: {dict(produto._meta.get_field('plataforma').choices).get(plataforma_detectada, plataforma_detectada)}")
+        plataforma_chave = DetectorPlataforma.detectar(produto.link_afiliado)
+        plataforma_obj = PlataformaEcommerce.objects.get(chave=plataforma_chave)
+        produto.plataforma = plataforma_obj
+        logger.info(f"🔍 Plataforma detectada: {plataforma_obj.nome}")
         
         dados = extrair_dados_produto(produto.link_afiliado)
 

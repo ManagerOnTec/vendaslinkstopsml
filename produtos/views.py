@@ -49,18 +49,18 @@ class ProdutosCombinedListView(ListView):
         """
         busca = self.request.GET.get('q', '').strip()
         categoria_slug = self.request.GET.get('categoria', '').strip()
-        plataforma = self.request.GET.get('plataforma', '').strip()
+        plataforma_id = self.request.GET.get('plataforma', '').strip()
         
         # Query base: produtos ativos
-        queryset = ProdutoAutomatico.objects.filter(ativo=True).select_related('categoria')
+        queryset = ProdutoAutomatico.objects.filter(ativo=True).select_related('categoria', 'plataforma')
         
         # Filtro de categoria (se fornecido)
         if categoria_slug:
             queryset = queryset.filter(categoria__slug=categoria_slug)
         
         # Filtro de plataforma (se fornecido)
-        if plataforma:
-            queryset = queryset.filter(plataforma=plataforma)
+        if plataforma_id:
+            queryset = queryset.filter(plataforma_id=plataforma_id)
         
         # Filtro de busca (se fornecido)
         if busca:
@@ -85,28 +85,36 @@ class ProdutosCombinedListView(ListView):
             f"{count_auto} automáticos = {queryset.count()} total"
         )
         
+        # ✅ GUARDAR O QUERYSET FILTRADO PARA USO EM get_context_data
+        self._filtered_queryset = queryset
+        
         return queryset
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        
         context['categorias'] = Categoria.objects.filter(ativo=True).order_by('ordem', 'nome')
         context['categoria_atual'] = self.request.GET.get('categoria', '')
         context['busca_atual'] = self.request.GET.get('q', '')
         
-        # Adicionar plataformas disponíveis (obtidas do queryset)
-        from .models import Plataforma
+        # ✅ Obter plataformas ÚNICAS do queryset filtrado (agora é FK)
         plataforma_selecionada = self.request.GET.get('plataforma', '')
         
-        # Obter plataformas únicas do queryset atual
-        plataformas_no_queryset = self.object_list.values_list('plataforma', flat=True).distinct()
+        if hasattr(self, '_filtered_queryset'):
+            # Obter IDs das plataformas do queryset (sem duplicatas, pois agora é FK)
+            plataforma_ids = list(self._filtered_queryset.values_list('plataforma_id', flat=True).distinct())
+            plataforma_ids = [pid for pid in plataforma_ids if pid]  # Filtrar None
+            
+            # Obter as plataformas ativas ordenadas
+            from .models import PlataformaEcommerce
+            context['plataformas'] = list(
+                PlataformaEcommerce.objects.filter(id__in=plataforma_ids, ativo=True).order_by('ordem', 'nome').values('id', 'nome')
+            )
+            logger.info(f"✅ Plataformas do queryset: {[p['nome'] for p in context['plataformas']]}")
+        else:
+            context['plataformas'] = []
+            logger.warning("⚠️ _filtered_queryset não disponível")
         
-        # Mapear para labels amigáveis
-        plataforma_choices_dict = dict(Plataforma.choices)
-        context['plataformas'] = [
-            {'value': p, 'label': plataforma_choices_dict.get(p, p)}
-            for p in sorted(plataformas_no_queryset)
-            if p  # Filtrar valores vazios
-        ]
         context['plataforma_atual'] = plataforma_selecionada
         
         anuncios = Anuncio.objects.filter(ativo=True)

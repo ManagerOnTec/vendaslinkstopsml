@@ -77,8 +77,41 @@ class Anuncio(models.Model):
         return f"{self.nome} ({self.get_posicao_display()})"
 
 
+class PlataformaEcommerce(models.Model):
+    """Plataformas de e-commerce suportadas - Modelo separado para evitar duplicatas."""
+    chave = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name="Chave",
+        help_text="Identificador único (mercado_livre, amazon, shopee, shein, outro)"
+    )
+    nome = models.CharField(
+        max_length=100,
+        verbose_name="Nome",
+        help_text="Nome exibido da plataforma"
+    )
+    ativo = models.BooleanField(
+        default=True,
+        verbose_name="Ativo"
+    )
+    ordem = models.IntegerField(
+        default=0,
+        verbose_name="Ordem",
+        help_text="Ordem de exibição nos filtros"
+    )
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name="Criado em")
+
+    class Meta:
+        verbose_name = "Plataforma E-commerce"
+        verbose_name_plural = "Plataformas E-commerce"
+        ordering = ['ordem', 'nome']
+
+    def __str__(self):
+        return self.nome
+
+
 class Plataforma(models.TextChoices):
-    """Plataformas de e-commerce suportadas."""
+    """Chaves de plataformas para compatibilidade com scraper."""
     MERCADO_LIVRE = 'mercado_livre', 'Mercado Livre'
     AMAZON = 'amazon', 'Amazon'
     SHOPEE = 'shopee', 'Shopee'
@@ -123,13 +156,15 @@ class ProdutoAutomatico(models.Model):
         verbose_name="Link Afiliado",
         help_text="Cole o link do produto (Mercado Livre, Amazon, Shopee, Shein, etc) ou deixe em branco para manual"
     )
-    # Plataforma detectada
-    plataforma = models.CharField(
-        max_length=20,
-        choices=Plataforma.choices,
-        default=Plataforma.OUTRO,
+    # Plataforma detectada - Foreign Key para evitar duplicatas
+    plataforma = models.ForeignKey(
+        PlataformaEcommerce,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         verbose_name="Plataforma",
-        help_text="Detectada automaticamente pela URL do link"
+        help_text="Detectada automaticamente pela URL do link",
+        related_name='produtos'
     )
     # Campos extraídos automaticamente
     titulo = models.CharField(
