@@ -99,6 +99,8 @@ class PlataformaEcommerce(models.Model):
         verbose_name="Ordem",
         help_text="Ordem de exibição nos filtros"
     )
+
+    help_text="Ordem de exibição nos filtros. Menor = primeiro. Use múltiplos de 10 para facilitar inserções futuras."
     criado_em = models.DateTimeField(auto_now_add=True, verbose_name="Criado em")
 
     class Meta:
@@ -163,8 +165,9 @@ class ProdutoAutomatico(models.Model):
         null=True,
         blank=True,
         verbose_name="Plataforma",
-        help_text="Detectada automaticamente pela URL do link",
-        related_name='produtos'
+        help_text="Detectada automaticamente pela URL do link ou insira em produto manual",
+        related_name='produtos',
+        
     )
     # Campos extraídos automaticamente
     titulo = models.CharField(

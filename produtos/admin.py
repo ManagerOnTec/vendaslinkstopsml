@@ -6,7 +6,7 @@ from .models import (
     Categoria, Anuncio, ProdutoAutomatico, 
     ProdutoAutomaticoProxy, ProdutoManualProxy,
     AgendamentoAtualizacao, LogAtualizacao, DocumentoLegal, EscalonamentoConfig,
-    Cliente, SiteMaintenanceConfig
+    Cliente, SiteMaintenanceConfig, PlataformaEcommerce
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,30 @@ class AnuncioAdmin(admin.ModelAdmin):
         }),
         ('Configuração', {
             'fields': ('ativo', 'ordem')
+        }),
+    )
+
+
+@admin.register(PlataformaEcommerce)
+class PlataformaEcommerceAdmin(admin.ModelAdmin):
+    """Admin para gerenciar plataformas de e-commerce disponíveis."""
+    list_display = ('nome', 'chave', 'ativo', 'ordem', 'criado_em')
+    list_filter = ('ativo',)
+    search_fields = ('nome', 'chave')
+    list_editable = ('ativo', 'ordem')
+    ordering = ('ordem', 'nome')
+    readonly_fields = ('criado_em',)
+    
+    fieldsets = (
+        ('Identificação', {
+            'fields': ('chave', 'nome')
+        }),
+        ('Configuração', {
+            'fields': ('ativo', 'ordem')
+        }),
+        ('Metadata', {
+            'fields': ('criado_em',),
+            'classes': ('collapse',)
         }),
     )
 
