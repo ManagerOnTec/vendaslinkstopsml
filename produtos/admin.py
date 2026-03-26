@@ -153,9 +153,10 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
             'shein': '⬛ ',
             'outro': '❓ ',
         }
-        color = cores.get(obj.plataforma, '#999')
-        icone = icones.get(obj.plataforma, '')
-        label = obj.get_plataforma_display() if obj.plataforma else 'Não detectada'
+        plataforma_chave = obj.plataforma.chave if obj.plataforma else None
+        color = cores.get(plataforma_chave, '#999')
+        icone = icones.get(plataforma_chave, '')
+        label = obj.plataforma.nome if obj.plataforma else 'Não detectada'
         
         return format_html(
             '<span style="background:{};color:white;padding:5px 10px;'
