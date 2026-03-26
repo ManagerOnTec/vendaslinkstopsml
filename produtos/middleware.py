@@ -38,13 +38,40 @@ class HostValidationMiddleware:
                 f"   Esta requisição será rejeitada pelo CommonMiddleware"
             )
         elif incoming_host != 'UNKNOWN' and incoming_host not in self.allowed_hosts:
-            # Host não está na whitelist
+            # Host não está na whitelist - COLETAR INFORMAÇÕES DETALHADAS
+            user_agent = request.META.get('HTTP_USER_AGENT', 'UNKNOWN')
+            remote_addr = request.META.get('REMOTE_ADDR', 'UNKNOWN')
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR', 'NONE')
+            referer = request.META.get('HTTP_REFERER', 'NONE')
+            method = request.method
+            path = request.path
+            query_string = request.META.get('QUERY_STRING', '')
+            
+            # Detectar se é requisição INTERNA ou EXTERNA
+            eh_python_requests = 'python-requests' in user_agent.lower()
+            eh_localhost = remote_addr in ['127.0.0.1', 'localhost', '0.0.0.0'] or 'localhost' in remote_addr
+            eh_interno_gcp = remote_addr.startswith('10.') or remote_addr.startswith('172.')
+            
+            origem = "???"
+            if eh_python_requests:
+                origem = "🔴 INTERNO (python-requests)"
+            elif eh_localhost:
+                origem = "🔴 INTERNO (localhost)"
+            elif eh_interno_gcp:
+                origem = "🟡 GCP/INTERNO (IP privado)"
+            else:
+                origem = "🔵 EXTERNO (IP público/DNS)"
+            
             logger.warning(
-                f"⚠️ Host rejeitado (não está em ALLOWED_HOSTS):\n"
-                f"   Host da requisição: {incoming_host}\n"
-                f"   ALLOWED_HOSTS configurado com: {self.allowed_hosts}\n"
-                f"   Caminho: {request.path}\n"
-                f"   IP Remoto: {request.META.get('REMOTE_ADDR', 'UNKNOWN')}\n"
+                f"⚠️ Host rejeitado (não está em ALLOWED_HOSTS) - {origem}:\n"
+                f"   Host: {incoming_host}\n"
+                f"   User-Agent: {user_agent[:80]}\n"
+                f"   REMOTE_ADDR: {remote_addr}\n"
+                f"   X-Forwarded-For: {x_forwarded_for}\n"
+                f"   Method: {method} {path}\n"
+                f"   Query: {query_string[:100] if query_string else 'NONE'}\n"
+                f"   Referer: {referer if referer != 'NONE' else 'NONE'}\n"
+                f"   ALLOWED_HOSTS: {self.allowed_hosts}\n"
                 f"\n   💡 Solução: Adicione '{incoming_host}' à variável ALLOWED_HOSTS"
             )
         
