@@ -4,6 +4,22 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+def populate_plataformas(apps, schema_editor):
+    """Popula a tabela PlataformaEcommerce."""
+    PlataformaEcommerce = apps.get_model('produtos', 'PlataformaEcommerce')
+    
+    plataformas = [
+        {'chave': 'mercado_livre', 'nome': 'Mercado Livre', 'ordem': 0},
+        {'chave': 'amazon', 'nome': 'Amazon', 'ordem': 1},
+        {'chave': 'shopee', 'nome': 'Shopee', 'ordem': 2},
+        {'chave': 'shein', 'nome': 'Shein', 'ordem': 3},
+        {'chave': 'outro', 'nome': 'Outro', 'ordem': 4},
+    ]
+    
+    for plat in plataformas:
+        PlataformaEcommerce.objects.get_or_create(**plat)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -32,4 +48,5 @@ class Migration(migrations.Migration):
             name='plataforma',
             field=models.ForeignKey(blank=True, help_text='Detectada automaticamente pela URL do link', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='produtos', to='produtos.plataformaecommerce', verbose_name='Plataforma'),
         ),
+        migrations.RunPython(populate_plataformas),
     ]
