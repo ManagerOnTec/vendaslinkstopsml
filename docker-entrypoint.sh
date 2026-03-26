@@ -2,6 +2,7 @@
 set -e
 
 echo "🔄 Executando migrations..."
+python manage.py migrate --fake produtos 0015_plataformaecommerce_and_more --no-input
 python manage.py migrate --no-input
 
 echo "📦 Coletando arquivos estáticos..."
