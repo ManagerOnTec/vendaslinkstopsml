@@ -52,6 +52,24 @@ Melhores Ofertas e Análise de Produtos - Mercado Livre, Amazon, Shopee | {{ SIT
 {% block content %}
 <div class="container py-4">
 
+    <!-- ✅ VERIFICAÇÃO DE MANUTENÇÃO -->
+    {% if maintenance_config.em_manutencao %}
+        <!-- ⚠️ SITE EM MANUTENÇÃO -->
+        <div class="text-center py-5" style="min-height: 70vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <div class="card border-0 shadow-lg" style="max-width: 500px; width: 100%;">
+                <div class="card-body p-5">
+                    <i class="bi bi-tools display-1 text-warning mb-3"></i>
+                    <h1 class="h2 fw-bold text-dark mb-3">Site em Atualização</h1>
+                    <p class="lead text-muted mb-3">Estamos realizando melhorias no site.</p>
+                    <p class="h5 text-primary fw-bold">Retorne mais tarde!</p>
+                    <hr>
+                    <p class="small text-muted mb-0">Obrigado pela paciência.</p>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <!-- ✅ SITE OPERACIONAL - EXIBIR CONTEÚDO NORMAL -->
+
     <!-- Anúncios do Topo -->
     {% for anuncio in anuncios_topo %}
     <div class="ad-block ad-topo mb-4 text-center">
@@ -474,6 +492,9 @@ Melhores Ofertas e Análise de Produtos - Mercado Livre, Amazon, Shopee | {{ SIT
         {{ anuncio.codigo_html|safe }}
     </div>
     {% endfor %}
+
+    {% endif %}
+    <!-- FIM DO IF/ELSE DE MANUTENÇÃO -->
 
 </div>
 

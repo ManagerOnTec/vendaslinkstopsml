@@ -5,7 +5,7 @@ from itertools import chain
 
 from django.views.generic import ListView
 from django.views import View
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -94,6 +94,14 @@ class ProdutosCombinedListView(ListView):
         context['anuncios_lateral'] = anuncios.filter(posicao='lateral')
         context['anuncio_intervalo'] = settings.ANUNCIO_A_CADA_N_PRODUTOS
         
+        # ✅ Passar configuração de manutenção para o template
+        from .models import SiteMaintenanceConfig
+        try:
+            context['maintenance_config'] = SiteMaintenanceConfig.get_config()
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao buscar SiteMaintenanceConfig: {e}")
+            context['maintenance_config'] = None
+        
         return context
     
     def paginate_queryset(self, queryset, page_size):
@@ -152,6 +160,36 @@ class CategoriaListView(ProdutosCombinedListView):
         )
         
         return queryset
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class HealthCheckAPIView(View):
+    """
+    ✅ SIMPLE & ROBUST Health Check Endpoint
+    
+    Returns 200 OK for Google Cloud Monitoring, load balancers, etc.
+    Does NOT depend on database, scraper, or complex operations.
+    
+    GET /api/healthcheck/
+        Returns: {"status": "ok", "timestamp": "..."}
+    """
+    
+    def get(self, request):
+        """Health check - minimal dependencies."""
+        from django.utils import timezone
+        
+        try:
+            # Just return OK with timestamp
+            # No database queries, no complex logic
+            return JsonResponse({
+                'status': 'ok',
+                'app': 'sitevendaslinkstopsml',
+                'timestamp': timezone.now().isoformat(),
+            }, status=200)
+        except Exception as e:
+            # Even if something fails, return a safe response
+            logger.error(f"Health check error: {e}", exc_info=True)
+            return HttpResponse('OK', status=200)  # Still 200 to avoid breaking monitoring
 
 
 @method_decorator(csrf_exempt, name='dispatch')

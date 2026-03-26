@@ -68,13 +68,11 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'produtos.middleware.HostValidationMiddleware',  # ← Validação de host ANTES do CommonMiddleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'produtos.middleware.MaintenanceMiddleware',  # ← Middleware de manutenção
 ]
 
 ROOT_URLCONF = 'vendaslinkstopsml.urls'

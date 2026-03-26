@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     ProdutosCombinedListView, CategoriaListView,
-    AtualizarProdutosAPIView, NewsletterSignupAPIView, 
+    HealthCheckAPIView, AtualizarProdutosAPIView, NewsletterSignupAPIView, 
     pagina_legal, ads_txt
 )
 
@@ -12,6 +12,8 @@ urlpatterns = [
     path('', ProdutosCombinedListView.as_view(), name='lista'),
     # Página de categoria: lista produtos de uma categoria (manuais + automáticos)
     path('categoria/<slug:slug>/', CategoriaListView.as_view(), name='categoria'),
+    # ✅ NEW: Health check for monitoring
+    path('api/healthcheck/', HealthCheckAPIView.as_view(), name='api_healthcheck'),
     # Endpoint para Cloud Scheduler / cron
     path('api/atualizar-produtos/', AtualizarProdutosAPIView.as_view(), name='api_atualizar'),
     # Endpoint para newsletter signup

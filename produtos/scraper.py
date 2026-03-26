@@ -1296,7 +1296,6 @@ def processar_produto_automatico(produto):
     from .models import StatusExtracao, Categoria, ProdutoAutomatico
     from .config_escalonamento import LIMITE_FALHAS, get_retry_delay
     from django.utils.text import slugify
-    from django.db import connection
     
     # ✅ CORREÇÃO: Recarregar produto do BD para garantir estado atual em worker threads
     # Evita stale data quando processando em paralelo
@@ -1305,9 +1304,6 @@ def processar_produto_automatico(produto):
     except ProdutoAutomatico.DoesNotExist:
         logger.error(f"❌ Produto não encontrado no BD: pk={produto.pk}")
         return False
-    
-    # Fechar connection anterior se houver (thread safety para Django)
-    connection.close()
     
     produto.status_extracao = StatusExtracao.PROCESSANDO
     produto.erro_extracao = ''
