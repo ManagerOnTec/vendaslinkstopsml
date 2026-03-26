@@ -250,7 +250,7 @@ Melhores Ofertas e Análise de Produtos - Mercado Livre, Amazon, Shopee | {{ SIT
                     {% endif %}
 
                     <!-- Badge Plataforma -->
-                    {% if produto.plataforma == 'mercado_livre' %}
+                    {% if produto|plataforma_chave == 'mercado_livre' %}
                         {% if produto.origem == 'automatico' or produto.status_extracao == 'sucesso' %}
                         <div class="position-absolute" style="bottom:auto;top:8px;left:8px;z-index:2;">
                             <span class="badge bg-warning text-dark" style="font-size:10px;">
@@ -297,25 +297,31 @@ Melhores Ofertas e Análise de Produtos - Mercado Livre, Amazon, Shopee | {{ SIT
                             </p>
                             {% endif %}
 
-                            <!-- Botão adaptatório conforme plataforma -->
-                            {% if produto.plataforma.chave == 'amazon' %}
-                                <div class="btn btn-warning btn-sm w-100 fw-semibold btn-comprar">
-                                    <i class="bi bi-cart-check me-1"></i>Ver na Amazon
-                                </div>
-                            {% elif produto.plataforma.chave == 'shopee' %}
-                                <div class="btn btn-danger btn-sm w-100 fw-semibold btn-comprar">
-                                    <i class="bi bi-cart-check me-1"></i>Ver na Shopee
-                                </div>
-                            {% elif produto.plataforma.chave == 'shein' %}
-                                <div class="btn btn-dark btn-sm w-100 fw-semibold btn-comprar">
-                                    <i class="bi bi-cart-check me-1"></i>Ver na Shein
-                                </div>
-                            {% else %}
-                                <!-- Padrão: Mercado Livre ou outro -->
-                                <div class="btn btn-warning btn-sm w-100 fw-semibold btn-comprar">
-                                    <i class="bi bi-cart-check me-1"></i>Ver no {{ produto.plataforma.nome }}
-                                </div>
-                            {% endif %}
+                            <!-- Botão adaptatório conforme plataforma (seguro contra None) -->
+                            {% with plat_chave=produto|plataforma_chave %}
+                                {% if plat_chave == 'amazon' %}
+                                    <div class="btn btn-warning btn-sm w-100 fw-semibold btn-comprar">
+                                        <i class="bi bi-cart-check me-1"></i>Ver na Amazon
+                                    </div>
+                                {% elif plat_chave == 'shopee' %}
+                                    <div class="btn btn-danger btn-sm w-100 fw-semibold btn-comprar">
+                                        <i class="bi bi-cart-check me-1"></i>Ver na Shopee
+                                    </div>
+                                {% elif plat_chave == 'shein' %}
+                                    <div class="btn btn-dark btn-sm w-100 fw-semibold btn-comprar">
+                                        <i class="bi bi-cart-check me-1"></i>Ver na Shein
+                                    </div>
+                                {% elif plat_chave == 'mercado_livre' %}
+                                    <div class="btn btn-warning btn-sm w-100 fw-semibold btn-comprar">
+                                        <i class="bi bi-cart-check me-1"></i>Ver no Mercado Livre
+                                    </div>
+                                {% else %}
+                                    <!-- Fallback: qualquer outra plataforma -->
+                                    <div class="btn btn-secondary btn-sm w-100 fw-semibold btn-comprar">
+                                        <i class="bi bi-cart-check me-1"></i>{{ produto|plataforma_label_botao }}
+                                    </div>
+                                {% endif %}
+                            {% endwith %}
                         </div>
                     </div>
                 </div>
