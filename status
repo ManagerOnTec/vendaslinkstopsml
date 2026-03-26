@@ -1,0 +1,207 @@
+[33mcommit 0281883b6442720da702886ad412de50a7dc55a8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Thu Mar 26 15:20:41 2026 -0300
+
+    v1.2
+
+[33mcommit 33299a747dc2aa6fed558ea1e8e3c94fee54c608[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Thu Mar 26 10:58:17 2026 -0300
+
+    v1.1
+
+[33mcommit b06dea382e635e0470beda6714d6bc1d5619b0ec[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Thu Mar 26 10:14:40 2026 -0300
+
+    v1.0
+
+[33mcommit 4f104b22938b5b7bb83ad8d8925b07896ec85085[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Thu Mar 26 09:20:46 2026 -0300
+
+    v900
+
+[33mcommit 3df3f385bee5c33d235e080dd125aff65c76548c[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Thu Mar 26 00:51:55 2026 -0300
+
+    v800
+
+[33mcommit fae9523f48673b10cfa8bc15ae2f470db341ffd4[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Thu Mar 26 00:17:52 2026 -0300
+
+    v500
+
+[33mcommit 4c47cd6465537fc44cea818505fb58fc66936b04[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Thu Mar 26 00:16:36 2026 -0300
+
+    🔧 Fix: Resolver travamento do scraper em ações em lote do Django Admin
+    
+    PROBLEMA:
+    - Scraper ficava travado ao processar múltiplos produtos via admin
+    - Todos itens ficavam em estado 'processando' indefinidamente
+    - Produtos individuais funcionavam 100%
+    - Ambiente: MySQL em produção
+    
+    CAUSA:
+    - asyncio.Semaphore não funciona entre múltiplas threads com asyncio.run() independentes
+    - Processamento sequencial com 1 worker thread (gargalo)
+    - Rate limiting global inadequado para múltiplas threads
+    
+    SOLUÇÃO:
+    1. Substituir asyncio.Semaphore → threading.Semaphore (thread-safe)
+    2. Implementar 3 workers paralelos (em vez de 1 sequencial)
+    3. Rate limiting controlado por thread no scraper
+    
+    IMPACTO:
+    - ✅ Paralelismo funcionando (6 tarefas em 0.1s)
+    - ✅ Sem travamentos em lote
+    - ✅ 5-15x mais rápido para múltiplas tarefas
+    - ✅ Sem regressões
+    
+    TESTES:
+    - test_simple_parallel.py: Valida paralelismo (PASSOU ✅)
+    - test_regression_individual.py: Valida produtos individuais (PASSOU ✅)
+    
+    Arquivos modificados:
+    - produtos/scraper.py: Substituir asyncio.Semaphore por threading.Semaphore
+    - produtos/task_queue.py: Implementar múltiplos workers paralelos
+    
+    Documentação:
+    - CORRECAO_TRAVAMENTO_ADMIN_LOTE.md: Análise detalhada
+    - RESUMO_CORRECAO_TRAVAMENTO.md: Resumo executivo
+
+[33mcommit 5c52ad9205f006bc594b1f077d1b02ad780a2115[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Thu Mar 26 00:03:37 2026 -0300
+
+    v400
+
+[33mcommit a7262d9278d0e3dc280c25e7b50fad2d72b2c9b8[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Wed Mar 25 23:27:20 2026 -0300
+
+    v300
+
+[33mcommit 29239f4d35c19b09694c20240b0c9890786bc837[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Wed Mar 25 19:43:36 2026 -0300
+
+    v200
+
+[33mcommit bc04a1ec445125ac9f747aaecabd750b4e947228[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Wed Mar 25 18:09:48 2026 -0300
+
+    v100
+
+[33mcommit 7c6722ba3ec72ffafd4333b92e9f5c4ca88febd9[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Tue Mar 24 21:14:04 2026 -0300
+
+    antex copilot
+
+[33mcommit 87b819cab0eebd402efb5f6ad3533d217c7e668a[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Mon Mar 23 23:32:17 2026 -0300
+
+    v80
+
+[33mcommit c229cbed677fd4bdfa85e8ca5fb7be24fdfc4b5e[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Mon Mar 23 22:34:26 2026 -0300
+
+    v70
+
+[33mcommit 8938068a53d5432e69769ae21bce33705b06b650[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Mon Mar 23 22:08:44 2026 -0300
+
+    v50
+
+[33mcommit b6329f80c651ad64a60d896fda06eae042515a0f[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Mon Mar 23 19:52:16 2026 -0300
+
+    v40
+
+[33mcommit c3c09914ae4b84b7ac5026e14d1b0aa2e7fe6187[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Mon Mar 23 18:58:19 2026 -0300
+
+    v33
+
+[33mcommit 208888014900e409a454792ffdfa9ba23d830333[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Mon Mar 23 17:31:33 2026 -0300
+
+    v32
+
+[33mcommit b40321e754b79f3692ddc797a19589434869d110[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Mon Mar 23 13:50:31 2026 -0300
+
+    v31
+
+[33mcommit ebfa81f7cd8fbc51adaf417b18f1a41afc7fa42b[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Mon Mar 23 13:40:31 2026 -0300
+
+    v30
+
+[33mcommit 0779920867c4a57152f2aa5ea4638fa1b1808fc1[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Sat Mar 21 22:27:24 2026 -0300
+
+    v18
+
+[33mcommit f16e4ab0163cd7df69564547d4995b223197a63c[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Sat Mar 21 18:21:32 2026 -0300
+
+    v12
+
+[33mcommit 135f3471691706fbe375497e8eca649c0c1e5170[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Sat Mar 21 18:13:48 2026 -0300
+
+    v11
+
+[33mcommit b076e69e9e8f14ff6f9fd3e1c15681ef8b9df8b3[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Sat Mar 21 17:34:00 2026 -0300
+
+    v10
+
+[33mcommit c7c63ece80ea3341db0ae341aabfcd20165a828e[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Sat Mar 21 16:57:42 2026 -0300
+
+    v7
+
+[33mcommit 425d5fb1504856beba200ea0e625302636183de1[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Sat Mar 21 15:29:06 2026 -0300
+
+    v7
+
+[33mcommit 2f3c742eec77fe5bc690cac53728ea9846b3dd7c[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Sat Mar 21 00:22:43 2026 -0300
+
+    ajuste settingst
+
+[33mcommit 8a221fa3641c267728c5f3fca4dfed1bd865a93e[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Fri Mar 20 23:21:57 2026 -0300
+
+    ajuste static
+
+[33mcommit a68962758155cf08323a5099d33894a12064ce82[m
+Author: ManagerOnTec <admin@managerontecsolutions.com.br>
+Date:   Fri Mar 20 22:23:29 2026 -0300
+
+    initial commit: Vendas Links Tops ML Django + Playwright scraper

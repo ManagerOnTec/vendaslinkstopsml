@@ -188,13 +188,40 @@ Melhores Ofertas e Análise de Produtos - Mercado Livre, Amazon, Shopee | {{ SIT
                     {{ page_obj.paginator.count }} produto{{ page_obj.paginator.count|pluralize:"s" }} encontrado{{ page_obj.paginator.count|pluralize:"s" }}
                 </p>
             </div>
-            {% if busca_atual or categoria_atual %}
+            {% if busca_atual or categoria_atual or plataforma_atual %}
             <a href="{% url 'produtos:lista' %}" class="btn btn-outline-secondary btn-sm mt-2 mt-md-0">
                 <i class="bi bi-x-circle me-1"></i>Limpar filtros
             </a>
             {% endif %}
         </div>
     </div>
+
+    <!-- Filtro de Plataformas -->
+    {% if plataformas %}
+    <div class="mb-4 p-3 bg-light rounded border border-light">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="badge bg-secondary me-2">
+                <i class="bi bi-funnel me-1"></i>Plataforma:
+            </span>
+            
+            <!-- Botão "Todas" -->
+            <a href="?{% if busca_atual %}&q={{ busca_atual|urlencode }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual|urlencode }}{% endif %}"
+               class="badge {% if not plataforma_atual %}bg-primary text-white{% else %}bg-light text-dark border border-secondary{% endif %} me-1 cursor-pointer"
+               style="cursor: pointer; padding: 6px 12px; text-decoration: none; display: inline-block;">
+                Todas
+            </a>
+            
+            <!-- Botões de Plataformas -->
+            {% for plataforma in plataformas %}
+            <a href="?plataforma={{ plataforma.value }}{% if busca_atual %}&q={{ busca_atual|urlencode }}{% endif %}{% if categoria_atual %}&categoria={{ categoria_atual|urlencode }}{% endif %}"
+               class="badge {% if plataforma.value == plataforma_atual %}bg-primary text-white{% else %}bg-light text-dark border border-secondary{% endif %} me-1 cursor-pointer"
+               style="cursor: pointer; padding: 6px 12px; text-decoration: none; display: inline-block;">
+                {{ plataforma.label }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     {% if produtos %}
     <!-- Grid de Produtos -->

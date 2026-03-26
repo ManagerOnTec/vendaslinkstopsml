@@ -45,9 +45,11 @@ class ProdutosCombinedListView(ListView):
         - Apenas produtos com status_extracao='sucesso' OU origem='manual'
         - Suporta busca por título
         - Suporta filtro por categoria
+        - Suporta filtro por plataforma
         """
         busca = self.request.GET.get('q', '').strip()
         categoria_slug = self.request.GET.get('categoria', '').strip()
+        plataforma = self.request.GET.get('plataforma', '').strip()
         
         # Query base: produtos ativos
         queryset = ProdutoAutomatico.objects.filter(ativo=True).select_related('categoria')
@@ -55,6 +57,10 @@ class ProdutosCombinedListView(ListView):
         # Filtro de categoria (se fornecido)
         if categoria_slug:
             queryset = queryset.filter(categoria__slug=categoria_slug)
+        
+        # Filtro de plataforma (se fornecido)
+        if plataforma:
+            queryset = queryset.filter(plataforma=plataforma)
         
         # Filtro de busca (se fornecido)
         if busca:
@@ -86,6 +92,22 @@ class ProdutosCombinedListView(ListView):
         context['categorias'] = Categoria.objects.filter(ativo=True).order_by('ordem', 'nome')
         context['categoria_atual'] = self.request.GET.get('categoria', '')
         context['busca_atual'] = self.request.GET.get('q', '')
+        
+        # Adicionar plataformas disponíveis (obtidas do queryset)
+        from .models import Plataforma
+        plataforma_selecionada = self.request.GET.get('plataforma', '')
+        
+        # Obter plataformas únicas do queryset atual
+        plataformas_no_queryset = self.object_list.values_list('plataforma', flat=True).distinct()
+        
+        # Mapear para labels amigáveis
+        plataforma_choices_dict = dict(Plataforma.choices)
+        context['plataformas'] = [
+            {'value': p, 'label': plataforma_choices_dict.get(p, p)}
+            for p in sorted(plataformas_no_queryset)
+            if p  # Filtrar valores vazios
+        ]
+        context['plataforma_atual'] = plataforma_selecionada
         
         anuncios = Anuncio.objects.filter(ativo=True)
         context['anuncios_topo'] = anuncios.filter(posicao='topo')
