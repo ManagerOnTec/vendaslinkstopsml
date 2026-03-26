@@ -1,7 +1,12 @@
 from datetime import timedelta
 import os
+import logging
 from decouple import config, Csv
 from pathlib import Path
+
+# Configurar logging básico para debug
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- SEGURANÇA --- 
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production-abc123xyz789') 
@@ -12,17 +17,34 @@ def _parse_hosts(hosts_str):
     """Remove portas de hostnames, deixa apenas domínio/IP"""
     return [s.split(':')[0].strip() for s in hosts_str.split(',') if s.strip()]
 
-ALLOWED_HOSTS = config(
-    "ALLOWED_HOSTS", 
-    default="", 
-    cast=lambda v: [s.strip() for s in v.split(",") if s]
-)
+# Se ALLOWED_HOSTS não estiver definido, aceita wildcard em DEBUG, mas tira erro em produção
+_allowed_hosts_env = config("ALLOWED_HOSTS", default="")
+
+# ============ DEBUG LOGGING ============
+logger.info("=" * 80)
+logger.info("📋 ALLOWED_HOSTS CONFIGURATION DEBUG")
+logger.info("=" * 80)
+logger.info(f"Raw environment variable: ALLOWED_HOSTS='{_allowed_hosts_env}'")
+logger.info(f"Comprimento: {len(_allowed_hosts_env)} caracteres")
+if _allowed_hosts_env:
+    for i, host in enumerate([s.strip() for s in _allowed_hosts_env.split(",") if s], 1):
+        logger.info(f"   [{i}] '{host}'")
+logger.info(f"DEBUG mode: {DEBUG}")
+logger.info("=" * 80)
+# ======================================
+
+if _allowed_hosts_env:
+    # Se estiver definido, usar conforme configurado
+    ALLOWED_HOSTS = [s.strip() for s in _allowed_hosts_env.split(",") if s]
+else:
+    # Fallback: aceitar wildcard em DEBUG para desenvolvimento
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '*'] if DEBUG else []
+    if not DEBUG:
+        logger.error("🚨 ERRO: ALLOWED_HOSTS não definido em produção!")
 
 CSRF_TRUSTED_ORIGINS = [
     f"https://{host}" for host in config("ALLOWED_HOSTS", default="", cast=Csv())
 ]
-
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -46,6 +68,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'produtos.middleware.HostValidationMiddleware',  # ← Validação de host ANTES do CommonMiddleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',

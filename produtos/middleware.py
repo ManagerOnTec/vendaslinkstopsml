@@ -3,6 +3,52 @@
 from django.shortcuts import render
 from django.http import HttpResponse
 from django.utils.text import slugify
+from django.core.exceptions import DisallowedHost
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class HostValidationMiddleware:
+    """
+    Middleware que valida e registra hosts rejeitados ANTES do CommonMiddleware.
+    Útil para debug em produção quando domínios não estão em ALLOWED_HOSTS.
+    """
+    
+    def __init__(self, get_response):
+        self.get_response = get_response
+        from django.conf import settings
+        self.allowed_hosts = settings.ALLOWED_HOSTS
+        
+        logger.info(f"✅ HostValidationMiddleware inicializado")
+        logger.info(f"   ALLOWED_HOSTS configurado com {len(self.allowed_hosts)} host(s)")
+        for i, host in enumerate(self.allowed_hosts, 1):
+            logger.info(f"   [{i}] {host}")
+    
+    def __call__(self, request):
+        # Se ALLOWED_HOSTS está vazio ou rejeitar o host, logar informações úteis
+        incoming_host = request.META.get('HTTP_HOST', 'UNKNOWN')
+        
+        from django.conf import settings
+        
+        if not self.allowed_hosts:
+            logger.error(
+                f"🚨 ALLOWED_HOSTS está VAZIO em produção (DEBUG={settings.DEBUG})!\n"
+                f"   Host da requisição: {incoming_host}\n"
+                f"   Esta requisição será rejeitada pelo CommonMiddleware"
+            )
+        elif incoming_host != 'UNKNOWN' and incoming_host not in self.allowed_hosts:
+            # Host não está na whitelist
+            logger.warning(
+                f"⚠️ Host rejeitado (não está em ALLOWED_HOSTS):\n"
+                f"   Host da requisição: {incoming_host}\n"
+                f"   ALLOWED_HOSTS configurado com: {self.allowed_hosts}\n"
+                f"   Caminho: {request.path}\n"
+                f"   IP Remoto: {request.META.get('REMOTE_ADDR', 'UNKNOWN')}\n"
+                f"\n   💡 Solução: Adicione '{incoming_host}' à variável ALLOWED_HOSTS"
+            )
+        
+        return self.get_response(request)
 
 
 class MaintenanceMiddleware:
