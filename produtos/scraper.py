@@ -973,7 +973,7 @@ async def _extrair_dados_shopee(url: str) -> dict:
     - Título (h1 ou meta og:title)
     - Imagem (og:image ou maior imagem real)
     - Categoria (breadcrumb)
-    - Preço: DEFAULT = "Confirmar na loja oficial" (não é extraído)
+    - Preço: DEFAULT = "Ver preço na loja oficial" (não é extraído)
     """
     _enforce_rate_limit()
     
@@ -982,7 +982,7 @@ async def _extrair_dados_shopee(url: str) -> dict:
     dados = {
         'titulo': '',
         'imagem_url': '',
-        'preco': 'Confirmar na loja oficial',  # ✅ DEFAULT
+        'preco': 'Ver preço na loja oficial',  # ✅ DEFAULT
         'preco_original': '',
         'descricao': '',
         'categoria': '',

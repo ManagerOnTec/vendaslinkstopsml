@@ -585,3 +585,121 @@ class EscalonamentoConfig(models.Model):
     def delete(self, *args, **kwargs):
         """Impede deletar a configuração"""
         raise ValueError("❌ Não é possível deletar EscalonamentoConfig. Editar ao invés disso.")
+
+
+# ============================================================
+# COLETA DE DADOS - Clientes para Newsletter
+# ============================================================
+
+class CanalPrefundido(models.TextChoices):
+    """Canais de comunicação preferidos do cliente."""
+    EMAIL = 'email', 'Email'
+    WHATSAPP = 'whatsapp', 'WhatsApp'
+    AMBOS = 'ambos', 'Email e WhatsApp'
+
+
+class Cliente(models.Model):
+    """
+    Modelo para captura de contatos interessados em receber atualizações.
+    Coleta dados para newsletter, promoções e análises.
+    
+    NÃO é usado para login - apenas para coleta de dados.
+    """
+    nome = models.CharField(
+        max_length=150,
+        verbose_name="Nome Completo",
+        help_text="Nome do cliente"
+    )
+    email = models.EmailField(
+        verbose_name="Email",
+        unique=True,
+        db_index=True
+    )
+    telefone = models.CharField(
+        max_length=20,
+        verbose_name="Telefone",
+        help_text="Com DDD (exemplo: 11999999999)"
+    )
+    
+    # Preferências de recebimento
+    canal_preferido = models.CharField(
+        max_length=20,
+        choices=CanalPrefundido.choices,
+        default=CanalPrefundido.EMAIL,
+        verbose_name="Canal Preferido de Contato"
+    )
+    
+    # Tipos de conteúdo de interesse
+    receber_promocoes = models.BooleanField(
+        default=True,
+        verbose_name="Receber Promoções",
+        help_text="Enviar notificações de ofertas e descontos"
+    )
+    receber_analises = models.BooleanField(
+        default=True,
+        verbose_name="Receber Análises",
+        help_text="Enviar análises de produtos e comparativos"
+    )
+    receber_atualizacoes = models.BooleanField(
+        default=True,
+        verbose_name="Receber Atualizações",
+        help_text="Enviar notícias e atualizações do site"
+    )
+    
+    # Status
+    ativo = models.BooleanField(
+        default=True,
+        verbose_name="Ativo",
+        help_text="Cliente ativo/inativo",
+        db_index=True
+    )
+    
+    # Metadata
+    criado_em = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Cadastrado em",
+        db_index=True
+    )
+    atualizado_em = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Última atualização"
+    )
+    
+    # Rastreamento
+    ip_origem = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name="IP de Origem",
+        help_text="IP do navegador ao fazer cadastro"
+    )
+    user_agent = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="User Agent",
+        help_text="Informações do navegador/device"
+    )
+    
+    # Confirmação
+    confirmado = models.BooleanField(
+        default=False,
+        verbose_name="Email Confirmado",
+        help_text="Cliente confirmou email (double-opt-in)"
+    )
+    token_confirmacao = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Token de Confirmação"
+    )
+    
+    class Meta:
+        verbose_name = "Cliente / Contato"
+        verbose_name_plural = "Clientes / Contatos"
+        ordering = ['-criado_em']
+        indexes = [
+            models.Index(fields=['email'], name='idx_cliente_email'),
+            models.Index(fields=['ativo', '-criado_em'], name='idx_cliente_ativo_data'),
+        ]
+    
+    def __str__(self):
+        return f"{self.nome} ({self.email})"

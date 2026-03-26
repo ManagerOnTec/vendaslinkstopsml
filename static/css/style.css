@@ -288,6 +288,30 @@ body {
     display: flex;
 }
 
+/* === Seção Análise e Recomendação - Collapse === */
+#analiseConteudo {
+    max-height: 1200px;
+    overflow: hidden;
+    opacity: 1;
+    transition: max-height 0.4s ease, opacity 0.3s ease, margin 0.3s ease, padding 0.3s ease;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+#btnToggleAnalise {
+    transition: all 0.3s ease;
+    padding: 0.35rem 0.65rem;
+}
+
+#btnToggleAnalise:hover {
+    background-color: rgba(52, 131, 250, 0.1) !important;
+    border-color: var(--primary) !important;
+}
+
+#btnToggleAnalise i {
+    transition: transform 0.3s ease;
+}
+
 /* === Responsividade === */
 
 /* Mobile Small (< 576px) */

@@ -322,3 +322,82 @@ def ads_txt(request):
     
     conteudo = f"google.com, {pub_id}, DIRECT, f08c47fec0942fa0"
     return HttpResponse(conteudo, content_type="text/plain")
+
+@method_decorator(csrf_exempt, name='dispatch')
+class NewsletterSignupAPIView(View):
+    """API para capturar cadastros de newsletter."""
+    
+    def post(self, request):
+        try:
+            import json
+            from .models import Cliente
+            
+            data = json.loads(request.body)
+            
+            # Validar dados obrigatorios
+            required = ['nome', 'email', 'telefone', 'canal_preferido']
+            for field in required:
+                if not data.get(field):
+                    return JsonResponse(
+                        {'detail': f'Campo obrigatorio: {field}'},
+                        status=400
+                    )
+            
+            # Obter IP do cliente
+            ip = self._get_client_ip(request)
+            
+            # Criar ou atualizar cliente
+            cliente, created = Cliente.objects.get_or_create(
+                email=data['email'],
+                defaults={
+                    'nome': data['nome'],
+                    'telefone': data['telefone'],
+                    'canal_preferido': data['canal_preferido'],
+                    'receber_promocoes': data.get('receber_promocoes', True),
+                    'receber_analises': data.get('receber_analises', True),
+                    'receber_atualizacoes': data.get('receber_atualizacoes', True),
+                    'ip_origem': ip,
+                    'user_agent': data.get('user_agent', ''),
+                    'ativo': True,
+                }
+            )
+            
+            # Se ja existia, atualizar campos
+            if not created:
+                cliente.nome = data['nome']
+                cliente.telefone = data['telefone']
+                cliente.canal_preferido = data['canal_preferido']
+                cliente.receber_promocoes = data.get('receber_promocoes', True)
+                cliente.receber_analises = data.get('receber_analises', True)
+                cliente.receber_atualizacoes = data.get('receber_atualizacoes', True)
+                cliente.ativo = True
+                cliente.save()
+            
+            logger.info(f"Newsletter signup: {cliente.email} ({'novo' if created else 'atualizado'})")
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Cadastro realizado com sucesso!',
+                'email': cliente.email
+            }, status=201)
+        
+        except json.JSONDecodeError:
+            return JsonResponse(
+                {'detail': 'JSON invalido'},
+                status=400
+            )
+        except Exception as e:
+            logger.error(f"Erro ao processar newsletter signup: {str(e)}")
+            return JsonResponse(
+                {'detail': 'Erro ao processar cadastro'},
+                status=500
+            )
+    
+    def _get_client_ip(self, request):
+        """Obter IP real do cliente considerando proxies."""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip

@@ -4,7 +4,8 @@ from django.contrib import messages
 from .models import (
     Categoria, Anuncio, ProdutoAutomatico, 
     ProdutoAutomaticoProxy, ProdutoManualProxy,
-    AgendamentoAtualizacao, LogAtualizacao, DocumentoLegal, EscalonamentoConfig
+    AgendamentoAtualizacao, LogAtualizacao, DocumentoLegal, EscalonamentoConfig,
+    Cliente
 )
 
 
@@ -918,3 +919,12 @@ class EscalonamentoConfigAdmin(admin.ModelAdmin):
         config = EscalonamentoConfig.obter_config()
         return redirect(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change', config.pk)
 
+
+@admin.register(Cliente)
+class ClienteAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'email', 'telefone', 'canal_preferido', 'ativo', 'criado_em')
+    list_filter = ('ativo', 'canal_preferido', 'criado_em')
+    search_fields = ('nome', 'email')
+    list_editable = ('ativo',)
+    readonly_fields = ('criado_em', 'atualizado_em')
+    ordering = ('-criado_em',)

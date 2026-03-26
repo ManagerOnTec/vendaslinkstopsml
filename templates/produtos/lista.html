@@ -3,7 +3,50 @@
 {% load produto_tags %}
 
 {% block title %}
-{% if busca_atual %}Resultados - {{ busca_atual }}{% elif categoria_atual %}{{ categoria_atual|title }}{% else %}Ofertas em Destaque{% endif %} | {{ SITE_NAME }}
+Melhores Ofertas e Análise de Produtos - Mercado Livre, Amazon, Shopee | {{ SITE_NAME }}
+{% endblock %}
+
+{% block extra_head %}
+<!-- Meta Description para SEO e Adsense -->
+<meta name="description" content="Encontre as melhores ofertas do Mercado Livre, Amazon, Shopee e outras plataformas com análises detalhadas e recomendações. Comparação de preços em tempo real e dicas de compra.">
+<meta name="keywords" content="ofertas,mercado livre,amazon,shopee,comparativo precos,promocoes,analise produtos,recomendacoes,descontos">
+
+<!-- Open Graph para redes sociais -->
+<meta property="og:title" content="Melhores Ofertas e Análises de Produtos - {{ SITE_NAME }}">
+<meta property="og:description" content="Seleção diária das melhores ofertas com análises detalhadas. Encontre produtos com melhor custo-benefício em múltiplas plataformas.">
+<meta property="og:image" content="{% static 'images/og-image.png' %}">
+<meta property="og:url" content="{{ request.build_absolute_uri }}">
+
+<!-- Schema.org JSON-LD para Adsense -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "Melhores Ofertas e Análises de Produtos",
+  "description": "Plataforma de análise e recomendação de produtos com melhores preços em Mercado Livre, Amazon, Shopee e outras plataformas",
+  "url": "{{ request.build_absolute_uri }}",
+  "image": "{% static 'images/og-image.png' %}",
+  "mainEntity": {
+    "@type": "Thing",
+    "name": "Ofertas e Comparação de Preços"
+  },
+  "about": [
+    {
+      "@type": "Thing",
+      "name": "Análise de Produtos"
+    },
+    {
+      "@type": "Thing",
+      "name": "Comparação de Preços"
+    },
+    {
+      "@type": "Thing",
+      "name": "Recomendações"
+    }
+  ]
+}
+</script>
+
 {% endblock %}
 
 {% block content %}
@@ -15,6 +58,96 @@
         {{ anuncio.codigo_html|safe }}
     </div>
     {% endfor %}
+
+    <!-- Seção Editorial - Conteúdo de Valor (Conformidade Adsense) -->
+    <div class="card border-0 shadow-sm mb-5 bg-light" id="analiseRecomendacao">
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="card-title fw-bold text-dark mb-0">
+                    <i class="bi bi-book-half me-2 text-primary"></i>Análise e Recomendação de Produtos
+                </h2>
+                <button class="btn btn-sm btn-outline-primary" id="btnToggleAnalise" title="Expandir/Recolher">
+                    <i class="bi bi-chevron-up"></i>
+                </button>
+            </div>
+            
+            <div id="analiseConteudo" class="analise-conteudo">
+                <div class="row">
+                    <div class="col-md-8">
+                    <p class="lh-lg">
+                        Bem-vindo ao nosso portal de análise e recomendação de produtos! 
+                        Diferente de simples agregadores de links, nós monitoramos <strong>múltiplas plataformas</strong> 
+                        (Mercado Livre, Amazon, Shopee, Shein e outras) para trazer <strong>as melhores ofertas com análise editorial</strong>.
+                    </p>
+                    
+                    <p class="lh-lg">
+                        <strong>Nossa metodologia:</strong> Cada produto é selecionado com base em critérios 
+                        de qualidade, avaliação dos usuários, histórico de preços e melhor custo-benefício. 
+                        Não mostramos apenas o mais barato, mas o que oferece melhor relação preço-qualidade para você.
+                    </p>
+                    
+                    <p class="lh-lg">
+                        <strong>Por que confiar em nossas recomendações?</strong>
+                    </p>
+                    <ul class="list-unstyled ms-3 mb-3">
+                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Análise diária de preços em tempo real</li>
+                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Seleção baseada em avaliações reais de compradores</li>
+                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Acompanhamento de histórico de preços para melhorar seu timing de compra</li>
+                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Recomendações editoriais de especialistas</li>
+                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Sem manipulação algoritmica - conteúdo transparente</li>
+                    </ul>
+
+                    <p class="lh-lg">
+                        <strong>Como usar nosso site:</strong> Browse pelas categorias ou use a busca para encontrar o produto que procura. 
+                        Clique no botão de cada produto para ir direto à página oficial da plataforma (Mercado Livre, Amazon, Shopee). 
+                        Todos os links direcionam para as plataformas oficiais - você compra com segurança total.
+                    </p>
+
+                    <p class="lh-lg text-muted">
+                        <strong>Transparência:</strong> Este site contém links de afiliação. Ao comprar através dos nossos links,
+                        podemos receber uma pequena comissão (que não afeta seu preço). Isso nos ajuda a manter o site funcionando,
+                        mas NUNCA influencia nossas recomendações. Nosso objetivo é sempre sua satisfação e melhor negócio possível.
+                    </p>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card bg-white border-primary mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title text-primary fw-bold mb-3">
+                                <i class="bi bi-trending-up me-2"></i>Tendências Atuais
+                            </h5>
+                            <p class="small text-muted mb-2">Produtos em tendência esta semana:</p>
+                            <ul class="small list-unstyled">
+                                <li><i class="bi bi-star-fill text-warning me-1"></i>Eletrônicos com maior desconto</li>
+                                <li><i class="bi bi-star-fill text-warning me-1"></i>Moda e acessoriosem oferta</li>
+                                <li><i class="bi bi-star-fill text-warning me-1"></i>Casa e jardim com precio competitivo</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="card bg-white border-success">
+                        <div class="card-body">
+                            <h5 class="card-title text-success fw-bold mb-3">
+                                <i class="bi bi-award me-2"></i>Dica de Especialista
+                            </h5>
+                            <p class="small">
+                                <strong>Melhor Momento para Comprar:</strong> 
+                                Preços geralmente caem em datas como Black Friday, Cyber Monday e finais de mês. Monitor nosso site para aproveitar as melhores oportunidades!
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botão de Newsletter -->
+    <div class="d-flex justify-content-center mb-4">
+        <button id="btnOpenNewsletter" class="btn btn-primary btn-lg shadow">
+            <i class="bi bi-envelope-heart me-2"></i>Receber Melhores Ofertas por Email/WhatsApp
+        </button>
+    </div>
 
     <!-- Header da Página -->
     <div class="page-header mb-4">
@@ -30,7 +163,7 @@
                     </h1>
                 {% else %}
                     <h1 class="h4 fw-bold text-dark mb-1">
-                        <i class="bi bi-fire me-2 text-danger"></i>Ofertas do Mercado Livre - Amazon - Shopee - Shein - Outros - Tudo em um só lugar!
+                        <i class="bi bi-fire me-2 text-danger"></i>Ofertas, Análises e Recomendações
                     </h1>
                 {% endif %}
                 <p class="text-muted small mb-0">
@@ -71,7 +204,7 @@
                     </div>
                     {% endif %}
 
-                    <!-- Badge ML (Apenas para Mercado Livre) -->
+                    <!-- Badge Plataforma -->
                     {% if produto.plataforma == 'mercado_livre' %}
                         {% if produto.origem == 'automatico' or produto.status_extracao == 'sucesso' %}
                         <div class="position-absolute" style="bottom:auto;top:8px;left:8px;z-index:2;">
@@ -142,22 +275,8 @@
                     </div>
                 </div>
             </a>
-        </div>
-
-        <!-- Inserir anúncio a cada N produtos -->
-        {% if anuncios_meio and forloop.counter|modulo:anuncio_intervalo and not forloop.last %}
-        <div class="col-12">
-            <div class="ad-block ad-meio my-3 text-center">
-                {% for anuncio in anuncios_meio %}
-                {% if forloop.first %}
-                {{ anuncio.codigo_html|safe }}
-                {% endif %}
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% endfor %}
+        </div> 
+        {% endfor %}     
     </div>
 
     <!-- Paginação -->
@@ -220,6 +339,135 @@
     </div>
     {% endif %}
 
+    <!-- FAQ Section - Adsense Conformance -->
+    <div class="card border-0 shadow-sm mt-5 mb-5">
+        <div class="card-body p-4">
+            <h3 class="card-title fw-bold text-dark mb-4">
+                <i class="bi bi-question-circle me-2 text-info"></i>Perguntas Frequentes
+            </h3>
+
+            <div class="accordion accordion-flush" id="faqAccordion">
+                <div class="accordion-item border-0 border-bottom">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                            Como os links funcionam? Sou redirecionado para as plataformas oficiais?
+                        </button>
+                    </h2>
+                    <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body">
+                            <p class="mb-0">
+                                Sim! <strong>Todos os nossos links direcionam para as plataformas OFICIAIS</strong> do Mercado Livre, Amazon, Shopee, Shein e outras. 
+                                Quando você clica em um produto:
+                            </p>
+                            <ul class="mt-3 mb-0">
+                                <li>🔗 Você é redirecionado direto para a página do produto na plataforma oficial</li>
+                                <li>🔐 A transação é 100% segura com a plataforma original</li>
+                                <li>💳 Você usa seu login e métodos de pagamento normais</li>
+                                <li>📦 Entrega e suporte pelo próprio Mercado Livre, Amazon, Shopee, etc</li>
+                                <li>💰 Nenhum custo adicional - o preço é exatamente o mostrado na plataforma</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item border-0 border-bottom">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                            Qual é a diferença do seu site em relação a outras listagens?
+                        </button>
+                    </h2>
+                    <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body">
+                            <p>
+                                Enquanto muitos sites apenas agregam links de forma automática e aleatória, <strong>nós fazemos análise editorial</strong>:
+                            </p>
+                            <ul class="mt-2 mb-0">
+                                <li>✓ Monitoramos preços em tempo real</li>
+                                <li>✓ Selecionamos com base em qualidade e avaliações reais</li>
+                                <li>✓ Consideramos histórico de preços (para saber se é realmente desconto)</li>
+                                <li>✓ Recomendamos produtos com melhor relação preço-qualidade</li>
+                                <li>✓ Organizamos por categorias com contexto editorial</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item border-0 border-bottom">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                            Por que vocês fazem isso? Qual é o modelo de negócio?
+                        </button>
+                    </h2>
+                    <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body">
+                            <p class="mb-2">
+                                <strong>Transparência total:</strong> Este site contém <strong>links de afiliados</strong>. Significa que:
+                            </p>
+                            <ul class="mb-3">
+                                <li><strong>Para o cliente:</strong> Você não paga nada a mais. O preço é exatamente o mesmo da plataforma original.</li>
+                                <li><strong>Para nós:</strong> Recebemos pequena comissão do Mercado Livre, Amazon, Shopee quando você compra através dos nossos links.</li>
+                                <li><strong>Importante:</strong> Essa comissão NUNCA afeta nossas recomendações. Recomendamos o melhor produto para VOCÊ, não o que nos dá mais comissão.</li>
+                            </ul>
+                            <p class="mb-0">Leia nossa <a href="/legal/privacidade" class="text-decoration-none" onclick="abrirPaginaPrivacidade(event)">Política de Privacidade e Divulgação de Afiliados</a> para mais detalhes.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item border-0 border-bottom">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                            Como receber promoções e análises por email ou WhatsApp?
+                        </button>
+                    </h2>
+                    <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body">
+                            <p>
+                                Clique no botão <strong>"Receber Melhores Ofertas"</strong> no topo desta página!
+                            </p>
+                            <p class="mb-2">
+                                Você pode se cadastrar para receber:
+                            </p>
+                            <ul class="mb-3">
+                                <li>📢 <strong>Promoções:</strong> Quando encontramos ofertas imperdíveis</li>
+                                <li>📊 <strong>Análises:</strong> Comparativos e avaliações de produtos</li>
+                                <li>🔔 <strong>Atualizações:</strong> Novas categorias e features do site</li>
+                            </ul>
+                            <p>
+                                Você escolhe receber por <strong>Email, WhatsApp ou ambos</strong>. Sem spam - apenas conteúdo útil!
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item border-0">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">
+                            Como posso confiar que o preço mostrado está correto?
+                        </button>
+                    </h2>
+                    <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body">
+                            <p>
+                                <strong>Todos os preços são atualizados em tempo real</strong> através de nossas ferramentas de monitoramento. 
+                                Mas para ter certeza absoluta:
+                            </p>
+                            <ul class="mt-2 mb-3">
+                                <li>1. Clique no botão "Ver na [Plataforma]"</li>
+                                <li>2. Você será levado direto à plataforma oficial</li>
+                                <li>3. Verifique o preço e disponibilidade lá (é a fonte de verdade)</li>
+                                <li>4. Se houver discrepância, o preço da plataforma oficial vale (pode ter mudado desde nossa última atualização)</li>
+                            </ul>
+                            <p class="mb-0">
+                                <small class="text-muted">Dica: A plataforma oficial pode ter variações de preço por localização, método de pagamento ou cupom. 
+                                Sempre verifique lá para confirmar o melhor preço para você.</small>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Anúncios do Rodapé -->
     {% for anuncio in anuncios_rodape %}
     <div class="ad-block ad-rodape mt-4 text-center">
@@ -228,4 +476,8 @@
     {% endfor %}
 
 </div>
+
+<!-- JavaScript para Newsletter Modal -->
+<script src="{% static 'js/newsletter-modal.js' %}" defer></script>
+
 {% endblock %}
