@@ -1,8 +1,9 @@
-from django.db import migrations
+import django.db.models.deletion
+from django.db import migrations, models
 
 
 def populate_plataformas(apps, schema_editor):
-    """Popula a tabela PlataformaEcommerce."""
+    """Popula tabela pois 0015 foi fakeada e nunca rodou."""
     PlataformaEcommerce = apps.get_model('produtos', 'PlataformaEcommerce')
     
     plataformas = [
@@ -24,5 +25,13 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Populate - 0015 foi fakeada então isso não rodou
         migrations.RunPython(populate_plataformas),
+        # ALTER para nullable
+        migrations.AlterField(
+            model_name='produtoautomatico',
+            name='plataforma',
+            field=models.ForeignKey(blank=True, help_text='Detectada automaticamente pela URL do link', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='produtos', to='produtos.plataformaecommerce', verbose_name='Plataforma'),
+        ),
     ]
+
