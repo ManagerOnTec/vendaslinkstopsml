@@ -161,9 +161,7 @@ class ProdutoAutomatico(models.Model):
     # Plataforma detectada - Foreign Key para evitar duplicatas
     plataforma = models.ForeignKey(
         PlataformaEcommerce,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.SET_NULL,        
         verbose_name="Plataforma",
         help_text="Detectada automaticamente pela URL do link ou insira em produto manual",
         related_name='produtos',
