@@ -165,7 +165,7 @@ class ProdutoAutomatico(models.Model):
         null=True,
         blank=True,
         verbose_name="Plataforma",
-        help_text="Detectada automaticamente pela URL do link ou insira em produto manual",
+        help_text="Automaticamente pela URL do link ou insira em produto manual",
         related_name='produtos',
     )
     # Campos extraídos automaticamente
