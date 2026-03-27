@@ -447,11 +447,11 @@ class ProdutoManualProxyAdmin(admin.ModelAdmin):
     list_editable = ('destaque', 'ativo', 'ordem')
     list_per_page = 25
     ordering = ('-destaque', 'ordem', '-criado_em')
-    readonly_fields = ('preview_imagem_grande', 'criado_em', 'atualizado_em', 'origem_badge')
+    readonly_fields = ('preview_imagem_grande', 'criado_em', 'atualizado_em')
 
     fieldsets = (
         ('Informações do Produto', {
-            'fields': ('titulo', 'categoria', 'plataforma', 'preco', 'preco_original', 'origem_badge'),
+            'fields': ('titulo', 'categoria', 'plataforma', 'preco', 'preco_original', 'origem'),
             'description': 'Preencha manualmente os dados do produto. Deixe "Link Afiliado" em branco se não tiver.'
         }),
         ('Imagem', {
