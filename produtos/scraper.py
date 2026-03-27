@@ -1312,11 +1312,17 @@ def processar_produto_automatico(produto):
     try:
         logger.info(f"🔄 Iniciando processamento do link: {produto.link_afiliado}")
         
-        # Detectar plataforma
+        # Detectar plataforma - usar get_or_create para garantir existência
         plataforma_chave = DetectorPlataforma.detectar(produto.link_afiliado)
-        plataforma_obj = PlataformaEcommerce.objects.get(chave=plataforma_chave)
+        plataforma_obj, criada = PlataformaEcommerce.objects.get_or_create(
+            chave=plataforma_chave,
+            defaults={'nome': plataforma_chave.replace('_', ' ').title(), 'ativo': True}
+        )
         produto.plataforma = plataforma_obj
-        logger.info(f"🔍 Plataforma detectada: {plataforma_obj.nome}")
+        if criada:
+            logger.info(f"✨ Plataforma CRIADA: {plataforma_obj.nome}")
+        else:
+            logger.info(f"🔍 Plataforma detectada: {plataforma_obj.nome}")
         
         dados = extrair_dados_produto(produto.link_afiliado)
 
