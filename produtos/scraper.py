@@ -1305,6 +1305,7 @@ def processar_produto_automatico(produto):
         logger.error(f"❌ Produto não encontrado no BD: pk={produto.pk}")
         return False
     
+    # Processamento normal para produto único
     produto.status_extracao = StatusExtracao.PROCESSANDO
     produto.erro_extracao = ''
     produto.save(update_fields=['status_extracao', 'erro_extracao'])

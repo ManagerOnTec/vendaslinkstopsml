@@ -91,7 +91,7 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
         'preview_imagem_grande', 'criado_em', 'atualizado_em', 'ultima_extracao',
         'falhas_consecutivas', 'motivo_desativacao'
     )
-    actions = ['extrair_dados_action', 'reextrair_dados_action', 'resetar_falhas_action', 'importar_produtos_arquivo_action']
+    actions = ['extrair_dados_action', 'reextrair_dados_action', 'resetar_falhas_action', 'importar_produtos_arquivo_action', 'importar_amazon_html_action']
 
     fieldsets = (
         ('Link do Produto (COLE AQUI)', {
@@ -340,7 +340,7 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
         return HttpResponseRedirect(url)
 
     def get_urls(self):
-        """Adicionar URL customizada para importação de arquivo."""
+        """Adicionar URLs customizadas para importação de arquivo e Amazon HTML."""
         from django.urls import path
         urls = super().get_urls()
         app_label = self.model._meta.app_label
@@ -348,6 +348,8 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
         custom_urls = [
             path('importar-arquivo/', self.admin_site.admin_view(self.processar_importacao_arquivo), 
                  name=f'{app_label}_{model_name}_importar_produtos_arquivo'),
+            path('importar-amazon-html/', self.admin_site.admin_view(self.processar_importacao_amazon_html), 
+                 name=f'{app_label}_{model_name}_importar_amazon_html'),
         ]
         return custom_urls + urls
 
@@ -428,6 +430,116 @@ class ProdutoAutomaticoProxyAdmin(admin.ModelAdmin):
             'has_view_permission': True,
         }
         return render(request, 'admin/importar_produtos.html', context)
+
+    @admin.action(description='🌐 Importar Amazon HTML/TXT (parse estruturado)')
+    def importar_amazon_html_action(self, request, queryset):
+        """Abre formulário para importar produtos Amazon com parsing de HTML estruturado."""
+        from django.urls import reverse
+        from django.http import HttpResponseRedirect
+        
+        # Construir URL customizada de importação
+        app_label = self.model._meta.app_label
+        model_name = self.model._meta.model_name
+        url_name = f'admin:{app_label}_{model_name}_importar_amazon_html'
+        
+        try:
+            url = reverse(url_name)
+        except:
+            # Fallback: construir URL manualmente
+            url = f'/admin/{app_label}/{model_name}/importar-amazon-html/'
+        
+        return HttpResponseRedirect(url)
+
+    def processar_importacao_amazon_html(self, request):
+        """View para processar upload de arquivo com HTML estruturado (Amazon)."""
+        from django.shortcuts import render
+        from .forms import ImportarAmazonHTMLForm
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+        from .models import OrigemProduto
+        from .scraper import processar_produto_automatico
+        from .task_queue import queue_batch_tasks
+        
+        if request.method == 'POST':
+            form = ImportarAmazonHTMLForm(request.POST, request.FILES)
+            if form.is_valid():
+                try:
+                    # Processar arquivo e extrair produtos
+                    produtos_dados = form.processar_arquivo()
+                    plataforma = form.cleaned_data.get('plataforma')
+                    processar_imediatamente = form.cleaned_data.get('processar_imediatamente', False)
+                    
+                    # Criar produtos para cada item extraído
+                    produtos_criados = []
+                    produtos_duplicados = []
+                    
+                    for produto_info in produtos_dados:
+                        titulo = produto_info.get('titulo', '')
+                        link = produto_info.get('link', '')
+                        imagem = produto_info.get('imagem', '')
+                        
+                        if not titulo or not link:
+                            logger.warning(f"⚠️ Produto ignorado: faltam dados essenciais - título: {bool(titulo)}, link: {bool(link)}")
+                            continue
+                        
+                        # Verificar se já existe
+                        existente = ProdutoAutomatico.objects.filter(link_afiliado=link).exists()
+                        if existente:
+                            produtos_duplicados.append(titulo)
+                            continue
+                        
+                        # Criar novo produto com dados do HTML
+                        produto = ProdutoAutomatico.objects.create(
+                            titulo=titulo,
+                            link_afiliado=link,
+                            imagem_url=imagem if imagem else None,
+                            origem=OrigemProduto.AUTOMATICO,
+                            plataforma=plataforma if plataforma else None,
+                            ativo=True
+                        )
+                        produtos_criados.append(produto)
+                        logger.info(f"✅ Produto criado: {titulo} ({produto.id})")
+                    
+                    # Processar produtos se solicitado
+                    if processar_imediatamente and produtos_criados:
+                        logger.info(f"🌐 Importação Amazon: Enfileirando {len(produtos_criados)} para processamento")
+                        queue_batch_tasks(processar_produto_automatico, produtos_criados)
+                        messages.success(
+                            request,
+                            f'✅ {len(produtos_criados)} produto(s) criado(s) com dados do HTML e enfileirado(s) para '
+                            f'processamento automático em background. Processamento em andamento...'
+                        )
+                    else:
+                        logger.info(f"🌐 Importação Amazon: {len(produtos_criados)} produtos criados SEM enfileiramento")
+                        messages.success(
+                            request,
+                            f'✅ {len(produtos_criados)} produto(s) criado(s) com dados do HTML. '
+                            f'Execute a ação "Extrair dados" para completar a extração.'
+                        )
+                    
+                    if produtos_duplicados:
+                        messages.warning(
+                            request,
+                            f'⚠️ {len(produtos_duplicados)} produto(s) já existente(s) foi(ram) ignorado(s).'
+                        )
+                    
+                    # Redirecionar para listagem
+                    return HttpResponseRedirect(reverse('admin:produtos_produtoautomaticoproxy_changelist'))
+                    
+                except Exception as e:
+                    logger.error(f"❌ Erro na importação Amazon HTML: {str(e)}", exc_info=True)
+                    messages.error(request, f'❌ Erro ao processar arquivo: {str(e)}')
+        else:
+            form = ImportarAmazonHTMLForm()
+        
+        # Renderizar template customizado
+        context = {
+            'form': form,
+            'title': 'Importar Produtos Amazon (HTML/TXT)',
+            'opts': self.model._meta,
+            'has_view_permission': True,
+        }
+        return render(request, 'admin/importar_amazon_html.html', context)
 
 
 @admin.register(ProdutoManualProxy)

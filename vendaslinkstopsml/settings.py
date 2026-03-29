@@ -157,7 +157,7 @@ GOOGLE_ADSENSE_ID = config('GOOGLE_ADSENSE_ID', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='webmaster@localhost')
 
 # Paginação
-PRODUTOS_POR_PAGINA = 12
+PRODUTOS_POR_PAGINA = 48
 ANUNCIO_A_CADA_N_PRODUTOS = 6
 
 # Segurança para endpoint de atualização automática (Cloud Scheduler)

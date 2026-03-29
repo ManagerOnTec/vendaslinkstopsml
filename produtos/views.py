@@ -20,6 +20,150 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
+def obter_produtos_ordenados_por_estrategia(queryset):
+    """
+    Ordena produtos de forma estratégica para paginação.
+    
+    Algoritmo:
+    1. Agrupa produtos por categoria (respeitando ordem da categoria)
+    2. Primeira passagem: toma até 4 de cada categoria, priorizando plataformas distintas
+    3. Segunda passagem: cicla pelas categorias novamente, pegando os próximos 4
+    4. Retorna TODOS os produtos nessa ordem estratégica
+    
+    Na paginação:
+    - Página 1: Cat A (4 plats diferentes), Cat B (4)... = 48 produtos
+    - Página 2: Cat D (4 plats diferentes), Cat E (4)... = 48 produtos
+    - Página 3: Cat A (próximos 4), Cat B (próximos 4)... = 48 produtos
+    
+    Args:
+        queryset: QuerySet de produtos
+    
+    Returns:
+        Lista de produtos ordenados estrategicamente
+    """
+    from collections import defaultdict
+    
+    def selecionar_com_prioridade_plataforma(produtos_lista, limite=4):
+        """
+        Seleciona até 'limite' produtos priorizando plataformas distintas.
+        
+        Estratégia:
+        1. Agrupa por plataforma
+        2. Pega 1 de cada plataforma (ordenado)
+        3. Se completou limite, retorna
+        4. Se não, pega os restantes mantendo a ordem
+        """
+        if not produtos_lista:
+            return []
+        
+        if len(produtos_lista) <= limite:
+            return produtos_lista
+        
+        # Agrupar por plataforma
+        por_plat = defaultdict(list)
+        for produto in produtos_lista:
+            plat_id = produto.plataforma_id if produto.plataforma else -1
+            por_plat[plat_id].append(produto)
+        
+        resultado_priorizado = []
+        indices_plat = {plat_id: 0 for plat_id in por_plat.keys()}
+        
+        # Primeira rodada: pega 1 de cada plataforma (ordenado)
+        plataformas_ordenadas = sorted(
+            por_plat.keys(),
+            key=lambda p: (
+                0 if p >= 0 else 1,  # Plataformas válidas primeiro
+                p if p >= 0 else 999  # Depois por ordem
+            )
+        )
+        
+        for plat_id in plataformas_ordenadas:
+            if len(resultado_priorizado) >= limite:
+                break
+            if indices_plat[plat_id] < len(por_plat[plat_id]):
+                resultado_priorizado.append(por_plat[plat_id][indices_plat[plat_id]])
+                indices_plat[plat_id] += 1
+        
+        # Segunda rodada: completa até 'limite' com produtos restantes
+        if len(resultado_priorizado) < limite:
+            for plat_id in plataformas_ordenadas:
+                if len(resultado_priorizado) >= limite:
+                    break
+                while indices_plat[plat_id] < len(por_plat[plat_id]):
+                    resultado_priorizado.append(por_plat[plat_id][indices_plat[plat_id]])
+                    indices_plat[plat_id] += 1
+                    if len(resultado_priorizado) >= limite:
+                        break
+        
+        return resultado_priorizado[:limite]
+    
+    # Converter para lista se necessário
+    if isinstance(queryset, QuerySet):
+        queryset = list(queryset)
+    
+    if not queryset:
+        return []
+    
+    # Agrupar produtos por categoria_id
+    produtos_por_cat = defaultdict(list)
+    for produto in queryset:
+        produtos_por_cat[produto.categoria_id].append(produto)
+    
+    # Ordenar cada categoria por plataforma e outros critérios
+    for cat_id in produtos_por_cat.keys():
+        produtos_por_cat[cat_id] = sorted(
+            produtos_por_cat[cat_id],
+            key=lambda p: (p.plataforma.ordem if p.plataforma else 999, -p.destaque, p.ordem)
+        )
+    
+    # Obter categorias ativas em ordem (respeitando campo 'ordem')
+    categorias_ordenadas = Categoria.objects.filter(
+        ativo=True,
+        id__in=produtos_por_cat.keys()
+    ).order_by('ordem', 'nome')
+    
+    resultado = []
+    indices_por_categoria = defaultdict(int)  # Índice do próximo produto a pegar de cada categoria
+    
+    # Algoritmo de ciclagem: enquanto houver produtos
+    continuando = True
+    passagem = 0
+    
+    while continuando:
+        continuando = False
+        passagem += 1
+        
+        for categoria in categorias_ordenadas:
+            produtos_cat = produtos_por_cat[categoria.id]
+            
+            # Pega próximos 4 produtos dessa categoria (começando do índice atual)
+            inicio = indices_por_categoria[categoria.id]
+            
+            if inicio >= len(produtos_cat):
+                # Já usou todos os produtos dessa categoria
+                continue
+            
+            # Pega até 4 produtos restantes dessa categoria
+            produtos_restantes = produtos_cat[inicio:]
+            produtos_selecionados = selecionar_com_prioridade_plataforma(produtos_restantes, limite=4)
+            
+            resultado.extend(produtos_selecionados)
+            
+            # Atualiza índice para a próxima passagem
+            indices_por_categoria[categoria.id] = inicio + len(produtos_selecionados)
+            
+            # Se ainda há produtos nessa categoria, vai ter mais ciclagem
+            if indices_por_categoria[categoria.id] < len(produtos_cat):
+                continuando = True
+    
+    logger.info(
+        f"✅ Estratégia de paginação: {len(resultado)} produtos em "
+        f"{len(categorias_ordenadas)} categorias ({passagem} passagem(ns)) - "
+        f"Com prioridade de plataformas distintas por categoria"
+    )
+    return resultado
+
+
 class ProdutosCombinedListView(ListView):
     """
     View unificada que lista produtos (modelo único: ProdutoAutomatico com proxy models).
@@ -135,8 +279,17 @@ class ProdutosCombinedListView(ListView):
         return context
     
     def paginate_queryset(self, queryset, page_size):
-        """Override para lidar com lista em vez de QuerySet."""
-        paginator = Paginator(queryset, page_size)
+        """Override para aplicar estratégia de paginação inteligente.
+        
+        Ordena produtos por categoria, pegando até 4 de cada categoria,
+        depois cicla pelas categorias para os próximos 4.
+        Permet que categorias se repitam em páginas diferentes.
+        """
+        # Aplicar estratégia de ordenação: 4 produtos por categoria, ciclando
+        produtos_ordenados = obter_produtos_ordenados_por_estrategia(queryset)
+        
+        # Paginar a lista estratégica
+        paginator = Paginator(produtos_ordenados, page_size)
         page_number = self.request.GET.get(self.page_kwarg, 1)
         page_obj = paginator.get_page(page_number)
         return paginator, page_obj, page_obj.object_list, page_obj.has_other_pages()
